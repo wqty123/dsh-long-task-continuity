@@ -1,0 +1,5 @@
+# dsh-long-task-continuity bundle patch
+#
+# User-editable settings live in the profile patch layer
+# (D:/dsh-home/profiles/web/cordis.patch.yml); this layer ships no overrides.
+[]

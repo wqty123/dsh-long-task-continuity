@@ -1,0 +1,93 @@
+# cordis.patch.example.yml —— 示例，不是安装物。
+#
+# 本文件只说明"挂载时这一行长什么样"。**不要**把它直接复制进
+# `$DSH_HOME/profiles/<profile>/cordis.patch.yml`：装载需要先获得用户批准，
+# 并完成 README 第 4 节第 1 步（接真 peer 类型）与第 5 步（§16 探针逐项核对）。
+#
+# 用法：把下面 `insert:` 里的条目并进你 profile 补丁层已有的 `insert:` 列表，
+# 或作为独立一条追加在数组末尾。`id` 必须与 `src/index.ts` 导出的 `name` 一致
+# （`dsh-long-task-continuity`），日志与设置页都按它归属。
+- insert:
+    - id: dsh-long-task-continuity
+      name: dsh-long-task-continuity
+      config:
+        # 总开关。false 时不订阅事件、不写存储、不注册工具（存储记录保留）。
+        enabled: true
+
+        # 本实例绑定的 Mission。留空表示还没开，可用 `/continuity open <目标>` 建立。
+        missionId: ''
+
+        # ——— 下面三个开关默认全部关闭，且互不替代 ———
+        # 自动换会话。§16 探针未过且未签字时，即使为 true 也只出观察数据。
+        autoRotationEnabled: false
+        # 操作者确认：已在本部署逐项核对 §16 的实测项。
+        # 探针里 `turn-boundary` 只能给 partial、`compaction-coordination` 恒 missing，
+        # 所以没有这一条签字，自动侧永远无法入场（这是刻意设计，不是缺陷）。
+        probesAcknowledged: false
+        # 注册 tools.guard：无有效租约的 Actor 不许执行受管写入。
+        # 身份映射猜错会拦掉正常干活，因此在真机核对过 Actor↔会话绑定之前保持 false。
+        enforceAdmission: false
+        # 注册 continuity_status / continuity_checkpoint 两个模型可见工具。
+        # 打开即给每次请求增加上下文税，默认 false。
+        registerTools: false
+
+        # ——— 轮换线口径：C = floor(min(r·W, W−R−H))、T = min(floor(p·W), C−M) ———
+        # 0 一律读成"未声明"，本包不猜。三项的来源逐格不同：
+        # · R：未声明时按会话读两条公开面——本会话 requestHeader().config.maxTokens（宿主直读）
+        #   与 dsh-context 的 contextTimeline.maxOutputTokens，两者都是请求信封的 last-wins 读数；
+        #   这里填了值则以声明为准（优先级：声明 > 宿主直读 > contextTimeline）。
+        # · H 与 r：dsh-context 也不发布（它自己照抄 compaction-basic 的出厂默认），宿主也没有
+        #   读取接口，所以只有"显式声明"或"显式接受镜像默认值"两条路。
+        # 任一格不齐 ⇒ 轮换线停在 observation，自动侧不换会话，手动 `/continuity rotate` 不受影响。
+        outputReserveTokens: 0
+        compactionHeadroomTokens: 0
+        compactionRatio: 0
+        # 打开后，未声明的 H 与 r 改用 compaction-basic 的出厂默认 65536 / 0.8。
+        # 那是本包抄来的值、不是读来的：台账一律标 mirrored-default，生效配置仍以原生为准。
+        # 默认 false——没核对过原生压缩配置之前，宁可停在观察模式。
+        acceptMirroredCompactionDefaults: false
+        # p 与 M：期望轮换比例与交接包+首步余量，这两个是本包自己的口径。
+        rotateRatio: 0.6
+        handoffMarginTokens: 8192
+
+        # 压力档：warn=该收尾了，hard=该换会话了（须大于 warnRatio）。
+        warnRatio: 0.45
+        hardRatio: 0.6
+        cooldownTurns: 5
+        minTurnsBetweenRotations: 8
+        maxRotationPerHour: 3
+
+        # 静默边界的等待：到 boundarySlowMs 只报"慢"，到 boundaryDeadlineMs 才放弃等待。
+        boundarySlowMs: 30000
+        boundaryDeadlineMs: 180000
+
+        # 轮换提交前迁移定时任务；是否在新会话重新装载原生 goal（关=只靠启动消息接续）。
+        migrateSchedules: true
+        rearmGoal: false
+
+        # outbox 消费节拍（0=只在显式 `/continuity drain` 或轮换提交时消费）与租约口径。
+        # 租约到期=需核对，不等于可抢占。
+        # 这两项是 setInterval 的周期，取自装载时的一次性快照：改完要重启本进程才换节拍。
+        outboxDrainMs: 0
+        leaseHeartbeatMs: 15000
+        # leaseExpiryMs 是**租约到期长度**，且与续期心跳共用同一个值（不允许两套口径）。
+        # <=0 时 renewLeases 直接返回 0（不再续期）；此时新写下的租约回退到
+        # src/core/entities.ts:1297 的 LEASE_EXPIRY_MS=90000，所以"关掉续期"不等于租约永不过期。
+        leaseExpiryMs: 90000
+
+        # ——— 任务板镜像（把台账行写进宿主 agentTeams 的任务板，让 dsh-context 的「编队」页就是台账）———
+        # 展示用途默认关：关掉后台定时器，只在 `/continuity board` 时算一次。
+        # 镜像会话填一个**正在 running** 的会话 id；`createTask/listTasks/updateTask` 都要求
+        # caller 是活体 Lead Agent，Lead 会话已关时留空就没有 caller、本轮直接跳过。
+        teamBoardMirror: false
+        teamBoardMirrorMs: 30000
+        teamBoardMirrorSession: ''
+
+        # ——— 超时重放防护（README 第 12 节）———
+        # run_code 的默认截止 120 秒（`@deepseek-ai/dsh-ptc-runtime-node` 的 timeoutMs 出厂值），
+        # 超时会中止这一次 run：排队未派发的调用直接作废，已派发的调用收到 abort（能否停在副作用之前取决于工具自身）。
+        # 内核写入一旦提交就不回滚：模型那侧只看到错误，台账里其实已落地，重发的其实是第二次执行。
+        # 同内容 + **不同** requestId 且落在本窗口内 ⇒ 拒绝并要求先读台账核对上一次是否已落地。
+        # 窗口取 120000=与截止同长；0 = 关闭这层防护（内核自带的同 requestId 去重不受影响）。
+        replayWindowMs: 120000
+

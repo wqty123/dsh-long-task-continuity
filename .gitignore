@@ -1,0 +1,7 @@
+# 依赖与本地状态
+node_modules/
+*.tsbuildinfo
+
+# dsh-purge 改写与历史迭代留下的备份（vendor/ 下的 .orig 是上游原件副本，保留）
+*.dshpurge.bak
+*.pre-*.bak

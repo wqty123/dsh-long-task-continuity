@@ -1,0 +1,7 @@
+# 仓库内一律 LF：这些文件在 Windows 上产生，但索引里保持 LF，
+# 否则每次 add 都会出现满屏 "LF will be replaced by CRLF" 噪声。
+* text=auto eol=lf
+
+# 二进制/生成物不做换行归一
+*.h5ad binary
+*.png binary
