@@ -59,7 +59,7 @@ R4/R5 最初做成了 `task.submit` / `task.claim` 的**硬拒绝**，结果 45 
 
 ## 0.2.0 — 2026-10-15
 
-新版复审（`E:/ds 维护以及插件制作/复审_20261015/新版复审报告_20261015.md`）的 N1–N4 与 G1–G3 全部落地，并把"已写好但没接进生产链"的模块接通。
+一轮复审的 N1–N4 与 G1–G3 全部落地，并把"已写好但没接进生产链"的模块接通。
 
 ### 修复（N 系列）
 
@@ -84,7 +84,7 @@ R4/R5 最初做成了 `task.submit` / `task.claim` 的**硬拒绝**，结果 45 
 
 - `node --test test/*.test.ts` → 590 用例 / 588 通过 / 0 失败 / 2 TODO。
 - `npx tsc -p tsconfig.check-all.json` → 0 错。
-- 部署：`E:/ds 维护以及插件制作/dsh-long-task-continuity` → `<DSH_HOME>/plugins/dsh-long-task-continuity`（web profile 经 Junction 指向它），逐文件 SHA256 校验 0 不一致。
+- 部署：复审报告 → `<DSH_HOME>/plugins/dsh-long-task-continuity`（web profile 经 Junction 指向它），逐文件 SHA256 校验 0 不一致。
 
 ## 0.1.0 — 2026-10-14
 

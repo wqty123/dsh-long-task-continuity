@@ -56,28 +56,20 @@ dsh plugin --profile web add dsh-long-task-continuity
 
 | 目标 | 入口 |
 | --- | --- |
-| 模块清单、注册面、配置项全表、租约口径、PTC 适配 | [设计说明](docs/design.md) |
+| 22 个工具、人侧命令组、参数写法 | [工具与命令](docs/tools.md) |
+| 29 项配置的含义、默认值与生效时机 | [配置项](docs/configuration.md) |
 | 每一版的改动与原因 | [CHANGELOG.md](CHANGELOG.md) |
 | 第三方归属与许可 | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |
 
-> README 只做入口，技术细节不在这里重复。**改代码前请先读 [`docs/design.md`](docs/design.md) 的第 9 节「其它关键口径」。**
+> README 只做入口，细节在下面这几篇里，不在这里重复。
 
 ## 工具名空间
 
-本插件占用全局 **`continuity_*`** 名空间（22 个工具，全部以插件名开头）。
-
-> DSH 的工具注册是**全局且不允许重名**的：后注册的一方直接抛错。给工具加前缀不是洁癖——它让一次撞名只毁掉一个名字，而不是整套工具一起消失。
+本插件占用全局 **`continuity_*`** 名空间（22 个工具，全部以插件名开头）。DSH 的工具注册是全局且不允许重名的，加前缀让一次撞名只影响一个名字。
 
 ## 更新记录
 
-完整明细（含每处修复的原因与证据）见 [CHANGELOG.md](CHANGELOG.md)。
-
-| 版本 | 日期 | 主题 |
-| --- | --- | --- |
-| **0.2.3** | 2026-10-16 | 交付与收口面三条复核判据（独立复核 / 派单复核 / reviewer 审整体）——只挂收口，不误伤日常 |
-| **0.2.2** | 2026-10-16 | 成员创建仅限 Lead：普通 ctx 上注册全局 guard，独立于 `enforceAdmission` |
-| **0.2.1** | 2026-10-15 | 原生成员出生即入台账（`team/member` → 自动 `actor.register`），解开内核里那对命令的互锁 |
-| **0.2.0** | 2026-10-15 | 版本号成为可见口径；`continuity_history` 补进客户端清单 |
+见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 特别感谢
 
