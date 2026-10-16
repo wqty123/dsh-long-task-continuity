@@ -230,7 +230,7 @@ function hostWith(states: Readonly<Record<string, unknown>>, measured?: number):
 /**
  * dsh-context 0.70.0 三个投影都可用、且详情已随值内联的一套读数（§27.1 的真实字段面）。
  *
- * 逐项照 `D:\dsh-home\profiles\web\node_modules\dsh-context\lib\index.d.ts`：
+ * 逐项照 `<DSH_HOME>\profiles\web\node_modules\dsh-context\lib\index.d.ts`：
  * - `contextTimeline` 是 `Snapshot`（`:244-312`）：`ok` + `current{...}` + 拆分代次的头部字段
  *   `counts`/`last`/`detailRev`（`:280-284`）**并且** `requests`/`events`/`nodes`/`archive` 非空、
  *   `droppedNodes: 0`、`surfaceFloor`/`archiveFloor`/`fileOpsFloor` 三个裁剪下限都不在场。

@@ -6,7 +6,7 @@
  * §14 的接口组按"写命令"逐个开放，读侧统一走 `continuity_status` 的 `aspect` 参数，
  * 避免十个只读工具把上下文税抬起来。
  *
- * ⚠️ 口径来自本机 `D:\deepseek-harness` @ v0.2.1-alpha.1（`packages/core/tools/src/schema.ts`）：
+ * ⚠️ 口径来自本机 `<DSH 源码>` @ v0.2.1-alpha.1（`packages/core/tools/src/schema.ts`）：
  * `parameters` 与 `output.schema` 是**声明式 JSON 规格对象**，不是 zod；`render(args, value)`
  * 必须返回 `ContentBlock[]`；`isConcurrencySafe` 是**函数**而不是布尔；
  * `ctx.tools.register()` 在 `output.render` 不是函数时直接抛 TypeError。
@@ -1406,7 +1406,7 @@ export const commandToolFactories = [
 /**
  * 模型面 token 预算（DS 线格式口径）。
  *
- * 口径来源：本机 `D:\deepseek-harness` @ v0.2.1-alpha.1，
+ * 口径来源：本机 `<DSH 源码>` @ v0.2.1-alpha.1，
  * `packages/llm/llm-deepseek/src/serialize.ts:159-166` —— 每请求只上行
  * `name / description / parameters`，output schema 不进模型上下文。
  * 度量用 `rotation/brief.ts` 的 `estimateTokens`，覆盖全部 22 个定义。

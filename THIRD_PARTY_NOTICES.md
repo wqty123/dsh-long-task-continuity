@@ -31,7 +31,7 @@
 | `dsh-kanban` 一类台账插件 | 调研 | 台账可读性：表格排序必须用显式键 → `src/views/export.ts` 的确定性渲染 |
 | `knighthongyu/dsh-handoff-compaction` @0.2.0-rc.6 | 调研；**许可证未核** | 只取"never invent ids"这一条概念 → `src/rotation/brief.ts` 的段落约束；未引用其任何代码 |
 | `bowenliang123/dsh-context` | 只读集成（v0.5 §27）；**未复制代码、未安装** | 上下文组成/演变观测的可选数据源 → `src/adapter/dsh-context.ts` 的只读适配器（投影形状识别、缺省降级、零值不当作健康）。注意与 `@2jumpsina/dsh-context-guard` 是**不同项目**：后者只影响 `src/rotation/policy.ts`（见上表 B） |
-| DSH 本体 `D:\deepseek-harness` @v0.2.1-alpha.1 | 只读 | 宿主 API 口径（`sessionController.create/resolveAgent`、`sessions.flush`、`sessionProjections.stateOf`、`agent/pre-step`、`tools.guard`、`storageDomain`）；另含 v0.5 §16 的三条只读证据：`compaction/compaction`（`compactNow` 与维护入口）、`session-query`（全会话查询契约）、`context/session-reference`（只读文本快照的边界）。`src/adapter/host-types.ts` 是本包写的结构化视图，非上游代码 |
+| DSH 本体 `<DSH 源码>` @v0.2.1-alpha.1 | 只读 | 宿主 API 口径（`sessionController.create/resolveAgent`、`sessions.flush`、`sessionProjections.stateOf`、`agent/pre-step`、`tools.guard`、`storageDomain`）；另含 v0.5 §16 的三条只读证据：`compaction/compaction`（`compactNow` 与维护入口）、`session-query`（全会话查询契约）、`context/session-reference`（只读文本快照的边界）。`src/adapter/host-types.ts` 是本包写的结构化视图，非上游代码 |
 
 ## D. 明确未使用（许可证红线）
 

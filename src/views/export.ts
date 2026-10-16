@@ -15,7 +15,7 @@
  *    颜色与版式一律交给 DSH 自己的 Markdown 渲染管线——不造第二套视觉。后续若做 Web 客户端界面
  *    （独立 client 包）：颜色只用 ui-theme 语义 token（`--dsw-alias-*`），组件先复用 ui-primitives，
  *    工具卡片经 `tool.call.toolview` keyed slot 注册，命令面经 `ctx.commandUi` 注册；规范书为本机
- *    `D:\deepseek-harness\docs\web-styling.zh.md` 与 `docs\ui-radius.zh.md`（v0.2.1-alpha.1 已核）。
+ *    `<DSH 源码>\docs\web-styling.zh.md` 与 `docs\ui-radius.zh.md`（v0.2.1-alpha.1 已核）。
  */
 import type { ControlEvent, MissionControl } from '../core/control.ts'
 import type { ArchiveSnapshot } from '../core/archive.ts'

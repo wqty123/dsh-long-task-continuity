@@ -1,7 +1,7 @@
 /**
  * 每请求工具定义文本的 token 预算（DS 线格式口径）。
  *
- * 口径来自本机 `D:\deepseek-harness` @ v0.2.1-alpha.1：
+ * 口径来自本机 `<DSH 源码>` @ v0.2.1-alpha.1：
  * `packages/llm/llm-deepseek/src/serialize.ts:159-166` 每请求只上行
  * `name / description / parameters`（output schema 不上行、不进模型上下文），
  * 所以"上下文税"就量这 22 个定义里进 JSON 的那部分文本。度量用 `estimateTokens`。

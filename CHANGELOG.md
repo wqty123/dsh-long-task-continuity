@@ -35,7 +35,7 @@ R4/R5 最初做成了 `task.submit` / `task.claim` 的**硬拒绝**，结果 45 
 
 ### 同期落地（不在本插件内）
 
-- `D:\dsh-home\AGENTS.md`（892 字符）：团队纪律写入 `$DSH_HOME` 的指令注入层。`dsh-agent-instructions` 在**下一个请求**就把它注入成 durable baseline（本机实测当场生效）——纪律从此不靠"谁记得去读文档"，而是每轮都在上下文里。
+- `<DSH_HOME>\AGENTS.md`（892 字符）：团队纪律写入 `$DSH_HOME` 的指令注入层。`dsh-agent-instructions` 在**下一个请求**就把它注入成 durable baseline（本机实测当场生效）——纪律从此不靠"谁记得去读文档"，而是每轮都在上下文里。
 
 ## 0.2.1 — 2026-10-15
 
@@ -49,7 +49,7 @@ R4/R5 最初做成了 `task.submit` / `task.claim` 的**硬拒绝**，结果 45 
 ### 审批边界同步收窄（委托人 2026-10-15 当场修正）
 
 - 现行边界：**只有「会变成 Actor 的」子代理需要 Lead 批准**（`spawn_teammate`）；成员为自己那摊活派出的干活型 `subagent` 不需要——那属于成员内部执行。
-- 规则落点：`E:\dsh-workspace\_audit\D288b_rules_master_table_v2.md` 的 `五·43` 与 `§7`（并把 `五·42` 标为已被收窄）、`D288_rules_master_table.md §2-A #1` 的同款标注。
+- 规则落点：本机纪律表新增的 `五·43` 与 `§7`（并把 `五·42` 标为已被收窄）。
 - 实现与边界一致（已核对）：`subagent` 包对 `team/member` **零命中**，唯一发射点是 `agent-team/roster.ts:277`（teammate 出生）⇒ 干活型子代理不产生该事件、自然不进 Actor、也不进审批面。
 
 ### 判据
@@ -84,7 +84,7 @@ R4/R5 最初做成了 `task.submit` / `task.claim` 的**硬拒绝**，结果 45 
 
 - `node --test test/*.test.ts` → 590 用例 / 588 通过 / 0 失败 / 2 TODO。
 - `npx tsc -p tsconfig.check-all.json` → 0 错。
-- 部署：`E:/ds 维护以及插件制作/dsh-long-task-continuity` → `D:/dsh-home/plugins/dsh-long-task-continuity`（web profile 经 Junction 指向它），逐文件 SHA256 校验 0 不一致。
+- 部署：`E:/ds 维护以及插件制作/dsh-long-task-continuity` → `<DSH_HOME>/plugins/dsh-long-task-continuity`（web profile 经 Junction 指向它），逐文件 SHA256 校验 0 不一致。
 
 ## 0.1.0 — 2026-10-14
 

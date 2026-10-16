@@ -1,7 +1,7 @@
 /**
  * PTC（Code-Mode）适配回归（任务 #57）。
  *
- * 锚点（本机 `D:\deepseek-harness` @ v0.2.1-alpha.1）：
+ * 锚点（本机 `<DSH 源码>` @ v0.2.1-alpha.1）：
  * - `packages/core/tools/src/index.ts:1024-1026`：PTC 下上行给模型的 schema 只剩 `run_code`；
  * - `packages/core/tools/src/index.ts:1352`：塌陷只作用于**模型直接发起**的调用（`!nested`），
  *   子调用仍走完整策略与审批；

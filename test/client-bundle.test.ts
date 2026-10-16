@@ -1,14 +1,14 @@
 /**
  * 浏览器半（`client.js`）装载契约回归（审阅 R8 / 实施计划第 6 步，#52 只读任务页）。
  *
- * 锚点（本机 `D:\deepseek-harness` @ v0.2.1-alpha.1，只读引用）：
+ * 锚点（本机 `<DSH 源码>` @ v0.2.1-alpha.1，只读引用）：
  * - `packages/client/ui-sidebar-right/src/client/index.ts:203-278`：右侧页签两段式注册——
  *   先 `sidebarRightTabs.register({ id, kind, title, guide })`，再用**定义 id** 作 key
  *   注入 `sidebar.right.pane.tab` 与 `sidebar.right.pane.tab.title` 两个键位座位；
  * - `packages/client/ui-sidebar-right/src/client/tab-registry.ts`：重复 id / 重复 guide id
  *   直接抛错（所以守卫与回滚必须自备）；
  * - `packages/client/ui-workspace/src/client/navigation.ts:34-39`：`openSession(SessionTarget)`；
- * - 现网同款写法（`D:\dsh-home\profiles\web\node_modules\dsh-context\lib\client.js`）：
+ * - 现网同款写法（`<DSH_HOME>\profiles\web\node_modules\dsh-context\lib\client.js`）：
  *   `ctx.inject` 单依赖守卫 + 注入回调返回清理函数。
  *
  * 本文件只验装载契约，不渲染 React、不触 DOM：用假 `window.__ModuleLoader__` 捕获工厂，

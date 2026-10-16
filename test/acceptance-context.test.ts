@@ -119,7 +119,7 @@ type HostStub = Pick<HostSlice, 'sessionProjections' | 'tokenMeter'>
  * 桩注册表：两个读取面都给（口径与 v05-context-quality.test.ts 的 `registryWith` 一致）。
  *
  * `snapshot()` 是 0.70.0 的**投影响应值**公开面（`packages/session/session-projection/src/index.ts:338`），
- * 值面就是 `D:\dsh-home\profiles\web\node_modules\dsh-context\lib\index.d.ts` 的 `Snapshot`（`:244-312`）/
+ * 值面就是 `<DSH_HOME>\profiles\web\node_modules\dsh-context\lib\index.d.ts` 的 `Snapshot`（`:244-312`）/
  * `HeadersState`（`:37-39`）/ `ActivityState`（`:7-18`）；`stateOf()` 给的是 fold state（另一张面，
  * `src/host/foldState.ts:21-63`）。适配层优先读值面（`src/adapter/dsh-context.ts:390-410`），
  * 而轻量头（slim head）只在值面上成立（`via === 'state'` 的 fold state 本来就是全集，

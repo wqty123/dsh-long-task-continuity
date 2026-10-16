@@ -1,7 +1,7 @@
 /**
  * 原生 Agent Team 只读接入层（`src/adapter/agent-teams.ts`，§G1）。
  *
- * 假数据按真机字段形状构造（本机 `D:\deepseek-harness` @ v0.2.1-alpha.1）：
+ * 假数据按真机字段形状构造（本机 `<DSH 源码>` @ v0.2.1-alpha.1）：
  * - 任务条目 = `TeamTaskView`（dsh: `packages/experimental/agent-team/src/types.ts:86-97`）：
  *   id/revision/subject/description/status/blockedBy/writeScopes/ownerName?/ready/writeScopeWarnings。
  *   真机**没有** title/assignee/createdAt/updatedAt 字段：标题是 `subject`（types.ts:78），
