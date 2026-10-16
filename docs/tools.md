@@ -45,6 +45,6 @@
 | 承诺与授权 | `obligate` `settle` `grant` `revoke` |
 | 派单与交付 | `dispatch` `deliver` `ack-delivery` |
 
-参数写法：竖线分段、逗号成列、分号分验收项、冒号与等号拼组内字段；`<必填>` 缺失时在入口就回用法，不把空字段丢给内核换一句 `transition rejected`。
+参数写法：竖线分段、逗号成列、分号分验收项、冒号与等号拼组内字段。`<必填>` 缺失时在入口返回用法。
 
-**有些动词刻意只在人这一侧**：`approve` / `verify` / `resume` / `grant` / `revoke` 等 12 个没有对应的模型工具。判据是"这一步该由人来决定"，不是"这个命令敏感"。
+`approve` / `verify` / `resume` / `grant` / `revoke` 等 12 个动词只在命令面提供，模型侧没有对应工具。
