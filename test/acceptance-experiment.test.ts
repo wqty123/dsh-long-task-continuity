@@ -212,19 +212,38 @@ function satisfiedTask(base: MissionControl): { readonly state: MissionControl; 
     createdAt: NOW,
     updatedAt: NOW,
   }
-  const review: ReviewReceipt = {
-    reviewId: 'rev_1',
+  // 三处审核不能互相顶替：R4 要一条 purpose=delivery 的逐任务复核，
+  // R6 要一条 purpose=integration 的整体审核。夹具把两条都备齐，
+  // 让本用例测的仍然只是"探索预留是否阻断完成判定"。
+  const deliveryReview: ReviewReceipt = {
+    reviewId: 'rev_delivery',
     missionId: 'mss_test',
     targetKind: 'task',
     targetId: task.taskId,
+    purpose: 'delivery',
     selfConsistent: 'pass',
     versusHistory: 'consistent',
     sharedEvidenceIds: [],
     sawReferenceAnswer: false,
-    independenceNote: '夹具：reviewer 对整体结果的独立审查记录',
+    independenceNote: '夹具：另一名成员对本次交付的独立复核',
     reviewerActorId: reviewer.actorId,
     methodRef: '夹具',
     reviewedAt: NOW,
+  }
+  const integrationReview: ReviewReceipt = {
+    reviewId: 'rev_integration',
+    missionId: 'mss_test',
+    targetKind: 'task',
+    targetId: task.taskId,
+    purpose: 'integration',
+    selfConsistent: 'pass',
+    versusHistory: 'consistent',
+    sharedEvidenceIds: [],
+    sawReferenceAnswer: false,
+    independenceNote: '夹具：reviewer 对整体结果的审核',
+    reviewerActorId: reviewer.actorId,
+    methodRef: '夹具',
+    reviewedAt: NOW + 1,
   }
   return {
     state: {
@@ -232,7 +251,7 @@ function satisfiedTask(base: MissionControl): { readonly state: MissionControl; 
       tasks: { ...base.tasks, [task.taskId]: task },
       verifications: { vrf_1: verification },
       actors: { ...base.actors, [reviewer.actorId]: reviewer },
-      reviews: { [review.reviewId]: review },
+      reviews: { [deliveryReview.reviewId]: deliveryReview, [integrationReview.reviewId]: integrationReview },
     },
     task,
   }

@@ -92,6 +92,32 @@ test('F4 反例③：任务改版之后，旧审查自动失效（定向失效�
   )
 })
 
+test('F4 反例④：整体审核（integration）不能顶替逐任务的交付复核', () => {
+  const state = deliveredState()
+  const onlyIntegration = {
+    ...state,
+    reviews: { rev_int: review({ purpose: 'integration' }) },
+  } as MissionControl
+  const report = missionCompletion(onlyIntegration)
+  assert.ok(
+    report.missing.some((m) => m.includes('没有独立复核')),
+    '整体审核看的是结果能否组合，不等于逐任务复核过"这件事做过没有"',
+  )
+})
+
+test('F4 反例⑤：逐任务交付复核（delivery）不能顶替整体审核', () => {
+  const state = deliveredState()
+  const onlyDelivery = {
+    ...state,
+    reviews: { rev_del: review({ purpose: 'delivery' }) },
+  } as MissionControl
+  const report = missionCompletion(onlyDelivery)
+  assert.ok(
+    report.missing.some((m) => m.includes('整体审核')),
+    '交付复核不能顶替收口前的整体结果审核',
+  )
+})
+
 test('F4 反例②：晚于交付之前的 reviewer 记录不能顶替本次整体审核', () => {
   const state = deliveredState()
   // 任务 updatedAt = NOW；把 reviewer 审查放在 NOW-1，即"交付之前审的旧东西"

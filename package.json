@@ -1,6 +1,6 @@
 {
   "name": "dsh-long-task-continuity",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": true,
   "description": "长期任务连续性与混合多代理框架：任务状态、执行权、检查点、交接与恢复（已装载到本机 web profile：D:\\dsh-home\\plugins）",
   "type": "module",

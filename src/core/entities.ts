@@ -787,12 +787,26 @@ export interface ValidatorSpec {
 }
 
 /** 独立审查记录（§22.9 DG-09）：自洽、历史对照、增量分别记，角色不同不等于证据独立。 */
+/**
+ * 审查用途：三处边界各自只审一件事，不能拿一种审核顶另一种。
+ *
+ * - `dispatch`：派单前——这件事有没有依据、是否重复、边界是否合理（不要求事先证明方法会成功）。
+ * - `delivery`：成员交付——实际新增了什么、关键证据是否可靠、历史差异如何解释。
+ * - `integration`：整体收口——目标是否覆盖、成员结果能否组合、集成验证与遗留问题是否处理。
+ *
+ * 可选：旧记录没有这个字段，一律按 `dispatch`/`delivery` 的复合语义看待（那时只有一种审核）。
+ * 保持可选是为了**不改存储版本**——加必填字段要升 `schemaVersion`，而版本不符会直接拒载现有台账。
+ */
+export type ReviewPurpose = 'dispatch' | 'delivery' | 'integration'
+
 export interface ReviewReceipt {
   readonly reviewId: ReviewId
   readonly missionId: MissionId
   readonly targetKind: 'task' | 'artifact' | 'claim' | 'verification'
   readonly targetId: string
   readonly targetRevision?: number
+  /** 缺省视为 `delivery`：旧记录只有交付复核这一种语义。 */
+  readonly purpose?: ReviewPurpose
   readonly selfConsistent: VerificationOutcome
   readonly versusHistory: 'consistent' | 'conflict' | 'duplicate' | 'unknown'
   readonly novelty?: string

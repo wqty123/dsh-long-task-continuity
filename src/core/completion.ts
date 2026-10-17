@@ -101,6 +101,9 @@ export function missionCompletion(
       && item.targetId === task.taskId
       && item.versusHistory !== 'unknown'
       && !executors.has(item.reviewerActorId)
+      // 用途对齐：交付复核只能是 `delivery`（旧记录无 purpose 当作 delivery）。
+      // 派单审核（dispatch）与整体审核（integration）不能顶替逐任务的交付复核。
+      && (item.purpose === undefined || item.purpose === 'delivery')
       // 定向失效：审查必须晚于**这一版**任务。任务改过（updatedAt 前移）之后，
       // 旧审查只证明旧版本，自动失效——这比要求人手"记得重审"可靠。
       && item.reviewedAt >= task.updatedAt)
@@ -137,8 +140,13 @@ export function missionCompletion(
     const lastDelivery = Math.max(...delivered.map((task) => task.updatedAt))
     if (reviews.length === 0) {
       missing.push('Mission 收口前需由 reviewer 成员登记一次整体审核（当前没有任何审查记录）')
-    } else if (!reviews.some((item) => reviewerIds.has(item.reviewerActorId) && item.reviewedAt >= lastDelivery)) {
-      missing.push('没有任何 reviewer 审查发生在最后一次交付之后：收口前需 reviewer 成员审核本次交付的整体结果')
+    } else if (!reviews.some((item) =>
+      reviewerIds.has(item.reviewerActorId)
+      && item.reviewedAt >= lastDelivery
+      // 用途对齐：整体审核必须是 `integration`。交付复核（或旧记录）不能顶替——
+      // 逐任务的"这件事做过没有"与"整体结果能不能组合"是两件事。
+      && item.purpose === 'integration')) {
+      missing.push('没有 reviewer 在最后一次交付之后做过整体审核（purpose=integration）：交付复核不能顶替整体结果审核')
     }
   }
 
