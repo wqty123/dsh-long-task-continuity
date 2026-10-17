@@ -1,5 +1,27 @@
 # 变更记录
 
+## 0.2.4 — 2026-10-17
+
+### 适配 DSH `0.2.1-rc.1`（宿主 `dsh-v0.2.1-alpha.1` → `dsh-v0.2.1-rc.1`）
+
+逐项核对本包依赖的宿主面，**代码零改动**：
+
+| 本包依赖面 | rc.1 里的变化 | 结论 |
+| --- | --- | --- |
+| `defineTool`（`@deepseek-ai/dsh-tools`） | 未变 | 无需改 |
+| `tools.guard` / `tools.register` / `guardReason` | 未变（该文件在版本走廊内对这几个符号零 diff） | 无需改 |
+| agent 钩子：`agent/pre-step`、`agent/status`、`session/event` | 未变 | 无需改 |
+| `@deepseek-ai/dsh-storage-domain` 的 `domainTable` / `defineDomain` | 未变 | 无需改 |
+| `sessionProjections.register()` 的清理函数 | 由 `() => void dispose()` 改为 `return dispose`（语义等价） | 无需改 |
+
+**装载实测**（web profile，rc.1 实例 PID 16084，2026-10-17 18:01:05 启动）：`continuity_status` 返回真实台账（Mission 已绑定、修订 38），22 个工具可用。
+
+**判据**：`tsc -p tsconfig.check-all.json` 0 错；**597 用例 / 595 通过 / 0 失败**。
+
+### 一处刻意不动
+
+包内 7 处 `v0.2.1-alpha.1` 注释是**口径来源标注**，保留原样——改成 rc.1 会变成没有逐条核过的表述。rc.1 的核对结论集中在本节。
+
 ## 0.2.3 — 2026-10-16
 
 ### 新增：交付与收口面的三条复核判据（R4 / R5 / R6）
