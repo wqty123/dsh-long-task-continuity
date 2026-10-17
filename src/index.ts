@@ -22,8 +22,9 @@
  *    compaction-basic 自己的 volatile config，`packages/compaction/compaction-basic/src/config.ts:75`），
  *    未声明 ⇒ `observation`，自动侧不换会话（§10.1 fail-closed 规则一）。手动 `/continuity rotate` 不走这条判定。
  */
-import { mkdirSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { mkdirSync, readFileSync, statSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
@@ -92,13 +93,14 @@ import { compactionPort, type CompactionEngineLike } from './adapter/compaction.
 import { frameFromReadings, postCompactionObservation, retentionListFromState, runQualityChain } from './adapter/quality-runner.ts'
 import { missionLedger, renderMissionMarkdown, renderRecoveryMarkdown, renderTimelineMarkdown } from './views/export.ts'
 import { WORKBENCH_PATH, missionWorkbench, type WorkbenchNativeInput } from './views/workbench.ts'
+import { DISCIPLINE_PATH, disciplineView } from './views/discipline.ts'
 import { createTeamBoardSyncer, type BoardSyncResult, type TeamBoardLike } from './team/board-sync.ts'
 
 /** Loader 诊断名，与 `cordis.patch.yml` 的行 id 一致。 */
 export const name = 'dsh-long-task-continuity'
 
 /** 与 `package.json` 同步维护。状态行要能回答"现在跑的是哪一版、从哪一份文件装载"（审阅 R8）。 */
-export const PLUGIN_VERSION = '0.2.6'
+export const PLUGIN_VERSION = '0.2.7'
 
 /** 只有这两个是硬依赖：没有存储就无所谓台账，没有命令注册表就没有 `/continuity`。 */
 export const inject = ['storageDomain', 'commands']
@@ -1287,6 +1289,24 @@ export function apply(ctx: Context, rawConfig: unknown): void {
       const native = await readNativeBoard(sessionId)
       return Response.json(missionWorkbench(state, native), { headers: noStore })
     }
+    // 纪律面板的数据面：直接读磁盘上的 $DSH_HOME/AGENTS.md，读不出来就如实报"不存在"，
+    // 不回落成插件内置文案——那样面板会显示一份没人实际遵守的纪律。
+    const disciplineFile = join(
+      process.env['DSH_HOME'] ?? join(homedir(), 'dsh-home'),
+      'AGENTS.md',
+    )
+    const disciplineRead = async (): Promise<Response> => Response.json(
+      disciplineView(disciplineFile, () => {
+        try {
+          const stat = statSync(disciplineFile)
+          if (!stat.isFile()) return undefined
+          return { text: readFileSync(disciplineFile, 'utf8'), modifiedAt: stat.mtime.toISOString() }
+        } catch {
+          return undefined
+        }
+      }),
+      { headers: noStore },
+    )
     const connection = service<ConnectionLike>('connection')
     if (connection === undefined) {
       logger.warn(`${name}: connection 服务未装载，台账面板没有读取通道。`)
@@ -1298,6 +1318,12 @@ export function apply(ctx: Context, rawConfig: unknown): void {
         } catch (error) {
           logger.warn(`${name}: ${label}路由 ${path} 注册失败：${String(error)}`)
         }
+      }
+      try {
+        routeDisposers.push(connection.fetch.register({ path: DISCIPLINE_PATH, methods: ['GET'], requestBody: 'buffered', fetch: disciplineRead }))
+        logger.info(`${name}: 已注册只读纪律路由 ${DISCIPLINE_PATH}。`)
+      } catch (error) {
+        logger.warn(`${name}: 纪律路由 ${DISCIPLINE_PATH} 注册失败：${String(error)}`)
       }
     }
 

@@ -173,6 +173,16 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 		"wb.group.actors": "工作者",
 		"wb.group.sessions": "会话接续",
 		"wb.group.coverage": "观测面",
+		"wb.group.discipline": "纪律（当前生效）",
+		"wb.group.injection": "注入确认",
+		"disc.source": "来源",
+		"disc.sha": "指纹",
+		"disc.bytes": "字节",
+		"disc.modified": "修改于",
+		"disc.missing": "读不到 $DSH_HOME/AGENTS.md：面板如实报缺失，不回落成内置文案",
+		"disc.evidence": "证据",
+		"disc.measured": "实测",
+		"disc.inferred": "同路径未单独实测",
 		"wb.count.taskTotal": "任务",
 		"wb.count.completedNow": "完成",
 		"wb.count.blocked": "阻塞",
@@ -366,6 +376,16 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 		"wb.group.actors": "Actors",
 		"wb.group.sessions": "Session continuity",
 		"wb.group.coverage": "Observation faces",
+		"wb.group.discipline": "Discipline (in force)",
+		"wb.group.injection": "Injection check",
+		"disc.source": "Source",
+		"disc.sha": "SHA-256",
+		"disc.bytes": "bytes",
+		"disc.modified": "modified",
+		"disc.missing": "Cannot read $DSH_HOME/AGENTS.md: the panel reports the gap instead of falling back to built-in copy",
+		"disc.evidence": "Evidence",
+		"disc.measured": "measured",
+		"disc.inferred": "same path, not separately measured",
 		"wb.count.taskTotal": "tasks",
 		"wb.count.completedNow": "done",
 		"wb.count.blocked": "blocked",
@@ -761,6 +781,8 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 	const WORKBENCH_ID = "continuity-workbench";
 	/** 与宿主 `WORKBENCH_PATH` 同字符串；浏览器侧去掉前导斜杠做文档相对解析。 */
 	const WORKBENCH_PATH = "api/continuity.workspace";
+	// 纪律面板：读磁盘上的 $DSH_HOME/AGENTS.md（服务端现读现算指纹），不是插件内副本。
+	const DISCIPLINE_PATH = "api/continuity.discipline";
 	const WORKBENCH_POLL_MS = 15000;
 	const TASK_FILTERS = ["attention", "all", "active", "review", "blocked", "completed", "failed", "cancelled", "needsReview"];
 	const ACTIVE_STATUSES = ["planned", "ready", "leased", "running", "retry_wait"];
@@ -826,6 +848,12 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 		return { kind: "ready", data: await response.json() };
 	}
 
+	async function readDiscipline(signal) {
+		const response = await fetch(DISCIPLINE_PATH, { signal, cache: "no-store", headers: { accept: "application/json" } });
+		if (!response.ok) throw new Error("HTTP " + response.status);
+		return await response.json();
+	}
+
 	function wbChip(label, tone, key) {
 		return h("span", { key, className: "ltc-wbChip", "data-tone": tone }, label);
 	}
@@ -889,6 +917,8 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 		// 拿不到就是空串 = 不指定，由服务端回落到 Mission Lead 绑定会话，绝不自造一个会话。
 		const sessionId = props.sessionId === undefined || props.sessionId === null ? "" : String(props.sessionId);
 		const [read, setRead] = useState({ phase: "loading", data: null, error: "" });
+		// 纪律面板独立于台账：没有 Mission 时也要能看出"纪律从哪来、有没有进上下文"。
+		const [discipline, setDiscipline] = useState(null);
 		const [filter, setFilter] = useState("attention");
 		const [openRows, setOpenRows] = useState({});
 		const [now, setNow] = useState(() => Date.now());
@@ -917,6 +947,13 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 			const poll = setInterval(() => { if (tab.visible) reload(); }, WORKBENCH_POLL_MS);
 			return () => { clearInterval(poll); };
 		}, [reload, tab.visible]);
+
+		useEffect(() => {
+			readDiscipline(tab.signal).then((value) => {
+				if (tab.signal.aborted) return;
+				setDiscipline(value);
+			}).catch(() => { /* 读不到就保持空态，不把错误塞进台账区 */ });
+		}, [tab.signal]);
 
 		const data = read.phase === "ready" ? read.data : null;
 		const jump = (sessionId) => { if (openWorkspaceSession !== null) openWorkspaceSession(sessionId); };
@@ -1121,7 +1158,35 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 			);
 		}
 
-		return h("div", { className: "ltc-wbRoot" }, header, body);
+		// —— 两块纪律面板 ——
+		// 面板一「纪律（当前生效）」：磁盘原文 + 指纹，可核对，不是插件内副本。
+		// 面板二「注入确认」：三类身份各自走哪条链路、是否实测过；推断不写成事实。
+		const disciplineView = discipline === null ? null : h(react.Fragment, null,
+			h("div", { className: "ltc-wbBody" },
+				h("div", { className: "ltc-wbRowHead" }, wbChip(t("wb.group.discipline"), "neutral", "discipline")),
+				h("div", { className: "ltc-wbMuted" }, t("disc.source") + " " + discipline.sourcePath),
+				h("div", { className: "ltc-wbMuted" }, discipline.present
+					? t("disc.sha") + " " + discipline.sha256.slice(0, 16) + " · " + t("disc.bytes") + " " + discipline.bytes + " · " + t("disc.modified") + " " + discipline.modifiedAt
+					: t("disc.missing")),
+				discipline.present ? h("div", { className: "ltc-wbList" }, discipline.sections.map((item) =>
+					h("div", { key: item.title, className: "ltc-wbRow" },
+						h("div", { className: "ltc-wbRowHead" }, wbChip(item.title, "neutral", "sec")),
+						h("div", { className: "ltc-wbMuted" }, item.lines.join(" · "))))) : null,
+			),
+			h("div", { className: "ltc-wbBody" },
+				h("div", { className: "ltc-wbRowHead" }, wbChip(t("wb.group.injection"), "neutral", "injection")),
+				h("div", { className: "ltc-wbMuted" }, discipline.mechanism),
+				h("div", { className: "ltc-wbList" }, discipline.identities.map((row) =>
+					h("div", { key: row.id, className: "ltc-wbRow" },
+						h("div", { className: "ltc-wbRowHead" },
+							wbChip(row.label, "neutral", "who"),
+							wbChip(row.evidence === "measured" ? t("disc.measured") : t("disc.inferred"), row.evidence === "measured" ? "neutral" : "muted", "ev")),
+						h("div", { className: "ltc-wbMuted" }, row.mechanism + " · " + row.evidenceNote)))),
+				h("div", { className: "ltc-wbMuted" }, discipline.notes.join(" · ")),
+			),
+		);
+
+		return h("div", { className: "ltc-wbRoot" }, header, body, disciplineView);
 	}
 
 	function ContinuityWorkbenchTitle(props) {
