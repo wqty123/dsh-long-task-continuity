@@ -22,10 +22,22 @@ export interface CompletionReport {
   readonly diagnostics?: readonly string[]
 }
 
-/** Mission 完成：必要验收项齐、放弃项有记录、成员与后台任务已停、预算已结算。 */
-export function missionCompletion(state: MissionControl, optionalTaskIds: readonly string[] = []): CompletionReport {
+/**
+ * Mission 完成：必要验收项齐、放弃项有记录、成员与后台任务已停、预算已结算。
+ *
+ * `boundary` 区分两种收口，它们的条件不同，不能混为一谈：
+ * - `mission`（默认）：整个 Mission 关闭，未结算 Attempt / 外部操作 / 待办 / 预算都算缺口。
+ * - `phase`：阶段交付。只看**纳入本阶段的任务**及其证据、依赖与阻断项；
+ *   无关的后台工作、独立探索不应妨碍这一阶段交付。
+ */
+export function missionCompletion(
+  state: MissionControl,
+  optionalTaskIds: readonly string[] = [],
+  boundary: 'mission' | 'phase' = 'mission',
+): CompletionReport {
   const missing: string[] = []
   const required = Object.values(state.tasks).filter((task) => !optionalTaskIds.includes(task.taskId))
+  const relevantTaskIds = new Set(required.map((task) => task.taskId))
 
   const incomplete = required.filter((task) => task.status !== 'completed')
   if (incomplete.length > 0) {
@@ -39,9 +51,11 @@ export function missionCompletion(state: MissionControl, optionalTaskIds: readon
     if (task.validity !== 'current') missing.push(`任务 ${task.taskId} 依赖依据已撤回，需复核（validity=${task.validity}）`)
   }
 
-  const live = Object.values(state.attempts).filter((attempt) => !isTerminalAttempt(attempt.status))
+  // 阶段交付只追究本阶段任务名下的进行中工作；Mission 关闭才看全局。
+  const inScope = (taskId: string | undefined): boolean => boundary === 'mission' || (taskId !== undefined && relevantTaskIds.has(taskId))
+  const live = Object.values(state.attempts).filter((attempt) => !isTerminalAttempt(attempt.status) && inScope(attempt.taskId))
   if (live.length > 0) missing.push(`${live.length} 个 Attempt 未结算`)
-  const openOps = Object.values(state.operations).filter((op) => op.status === 'intent' || op.status === 'executing' || op.status === 'outcome_unknown')
+  const openOps = Object.values(state.operations).filter((op) => (op.status === 'intent' || op.status === 'executing' || op.status === 'outcome_unknown') && inScope(op.taskId))
   if (openOps.length > 0) missing.push(`${openOps.length} 个操作结果未确定`)
   const pending = Object.values(state.outbox).filter((entry) => entry.completedAt === undefined)
   if (pending.length > 0) missing.push(`${pending.length} 项待办未投递`)
@@ -92,34 +106,22 @@ export function missionCompletion(state: MissionControl, optionalTaskIds: readon
     missing.push(`${unreviewed.length} 个已交付任务没有独立复核：${unreviewed.map((task) => task.taskId).join(', ')}（需另一名成员核对"是否做过、结论是否冲突"；本任务执行者自己的审查不算）`)
   }
 
-  // R5：执行者的检索回执必须**属于本次安排**。"曾检索过一次"不算合格：
-  // 回执时刻要晚于该任务第一次 attempt 的开始，且确实查到东西（complete + found）。
-  const startedAtOfTask = (taskId: string): number | undefined => {
-    const times = Object.values(state.attempts).filter((attempt) => attempt.taskId === taskId).map((attempt) => attempt.createdAt)
-    return times.length === 0 ? undefined : Math.min(...times)
-  }
-  const taskStartOfActor = (actorId: string): number | undefined => {
-    const times = required
-      .filter((task) => (task.currentAttemptId === undefined ? false : state.attempts[task.currentAttemptId]?.actorId === actorId))
-      .map((task) => startedAtOfTask(task.taskId))
-      .filter((at): at is number => at !== undefined)
-    return times.length === 0 ? undefined : Math.min(...times)
-  }
-  const executors = [...new Set(
-    required
-      .map((task) => (task.currentAttemptId === undefined ? undefined : state.attempts[task.currentAttemptId]?.actorId))
-      .filter((id): id is string => typeof id === 'string' && id.length > 0),
-  )]
-  const blind = executors.filter((actorId) => {
-    const from = taskStartOfActor(actorId)
-    return !Object.values(state.searches).some((item) =>
-      item.recordedBy === actorId
-      && (from === undefined || item.observedAt >= from)
-      && item.coverage === 'complete'
-      && item.outcome === 'found')
-  })
-  if (blind.length > 0) {
-    missing.push(`${blind.length} 名执行者没有本次安排有效的检索回执：${blind.join(', ')}（需 coverage=complete 且 outcome=found，时刻晚于任务开始）`)
+  // R5：本次交付要有一次**覆盖完整**的检索留痕。三种形态都算数：
+  // found（查到了）、not_found_in_scope（查过并确认范围内没有）、以及派单前已经做过的复用。
+  //
+  // 刻意不做的两件事：不按执行者逐个要求（同一范围重复检索是浪费），
+  // 也不卡"必须发生在开工之后"（无历史的新任务会被直接堵死，而"范围内确实没有"
+  // 本身就是有效结论）。真正不合格的只有两种：从没查过，或者查了但覆盖不完整——
+  // 后者才是"假阴性被当成不存在"的来源。
+  if (delivered.length > 0) {
+    const searches = Object.values(state.searches)
+    const solid = (item: { readonly coverage: string; readonly outcome: string }): boolean =>
+      item.coverage === 'complete' && (item.outcome === 'found' || item.outcome === 'not_found_in_scope')
+    // 没有回执**不报**：不是每个任务都需要检索，"必须查过一次"本身就是要取消的打卡式要求。
+    // 只在"登记了回执、却没有一条覆盖完整"时报——这才是把假阴性当成"范围内没有"的来源。
+    if (searches.length > 0 && !searches.some(solid)) {
+      missing.push(`${searches.length} 条检索回执都没有覆盖完整：需 coverage=complete 且 outcome 为 found 或 not_found_in_scope（partial/unknown 不能当作"范围内没有"）`)
+    }
   }
 
   // R6：确有交付时，收口前要有 **reviewer 身份**登记、且**晚于最后一次交付**的整体审核。
