@@ -76,6 +76,22 @@ test('F4 正例：另一名成员的审查可以消掉该缺口', () => {
   )
 })
 
+test('F4 反例③：任务改版之后，旧审查自动失效（定向失效）', () => {
+  const state = deliveredState()
+  // 审查发生在 NOW+10；把任务 updatedAt 推到 NOW+20，等于交付之后又改过。
+  const task = state.tasks[TASK_ID] as unknown as { updatedAt: number }
+  const bumped = {
+    ...state,
+    tasks: { ...state.tasks, [TASK_ID]: { ...state.tasks[TASK_ID], updatedAt: NOW + 20 } },
+  } as MissionControl
+  const report = missionCompletion(bumped)
+  assert.ok(task.updatedAt === NOW, '夹具前提：原任务 updatedAt 是 NOW')
+  assert.ok(
+    report.missing.some((m) => m.includes('没有独立复核')),
+    '任务改版后旧审查只证明旧版本，缺口必须回来',
+  )
+})
+
 test('F4 反例②：晚于交付之前的 reviewer 记录不能顶替本次整体审核', () => {
   const state = deliveredState()
   // 任务 updatedAt = NOW；把 reviewer 审查放在 NOW-1，即"交付之前审的旧东西"

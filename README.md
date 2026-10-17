@@ -2,7 +2,7 @@
   <img src="https://img.shields.io/github/stars/wqty123/dsh-long-task-continuity?style=flat&amp;label=%E2%98%85&amp;color=08C" alt="GitHub stars">
   <img src="https://img.shields.io/badge/license-MIT-2EA44F?style=flat" alt="MIT License">
   <img src="https://img.shields.io/badge/DSH-Plugin-47848F?style=flat" alt="DeepSeek Harness plugin">
-  <img src="https://img.shields.io/badge/version-0.2.3-4493F8?style=flat-square" alt="version 0.2.3">
+  <img src="https://img.shields.io/badge/version-0.2.7-4493F8?style=flat-square" alt="version 0.2.7">
 </p>
 
 <h3 align="center">DeepSeek Harness 的<b>长期任务连续性台账</b></h3>
@@ -16,6 +16,16 @@
 - **会话轮换与压缩协调**：压力跨档时先核对已写入内容能否回读，再决定轮换或压缩；同一 Actor 串行协调。
 - **原生 Agent Team 接入**：任务板只读合并；成员在 `team/member` 事件出现时自动登记为 Actor，此后其受管写入按身份校验。
 - **纪律经提示词层送达**：团队纪律写入 `$DSH_HOME/AGENTS.md`，随每个请求注入。
+
+## 边界
+
+**执行事实与验收事实分开。** 原生 Agent Team 负责任务的领取、租约与完成；插件只记录审计与验收结论（`submitted` / `accepted` / `changes_requested`），不建立第二套执行队列。原生 `completed` 表示执行结束，不等于验收通过。
+
+**按工作包审核，不按步骤。** 一次派单给一个完整工作包：目标、数据、预算、交付物。包内的算法选择、实现调整、子代理安排、路线试验由执行者自行决定，不逐项审批。只有目标改变、资源或预算扩大、新增未授权外部操作才重新审核。试验失败与推翻初始猜想属于正常负结果。
+
+**阶段交付与 Mission 关闭是两种边界。** 阶段交付只看纳入该阶段的任务与阻断项，无关后台工作不妨碍交付；整个 Mission 关闭另算，需处理剩余运行、外部操作与未履行承诺。
+
+**成员内部的子代理不升级为 Actor。** 成员为自己那摊活派出的干活型子代理属于内部执行，不需要审批；只有会变成 Actor 的才需要。
 
 ## 快速开始
 

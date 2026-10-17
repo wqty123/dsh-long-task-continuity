@@ -100,7 +100,7 @@ import { createTeamBoardSyncer, type BoardSyncResult, type TeamBoardLike } from 
 export const name = 'dsh-long-task-continuity'
 
 /** 与 `package.json` 同步维护。状态行要能回答"现在跑的是哪一版、从哪一份文件装载"（审阅 R8）。 */
-export const PLUGIN_VERSION = '0.2.7'
+export const PLUGIN_VERSION = '0.2.8'
 
 /** 只有这两个是硬依赖：没有存储就无所谓台账，没有命令注册表就没有 `/continuity`。 */
 export const inject = ['storageDomain', 'commands']

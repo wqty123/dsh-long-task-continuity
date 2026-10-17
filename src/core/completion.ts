@@ -100,7 +100,10 @@ export function missionCompletion(
       item.targetKind === 'task'
       && item.targetId === task.taskId
       && item.versusHistory !== 'unknown'
-      && !executors.has(item.reviewerActorId))
+      && !executors.has(item.reviewerActorId)
+      // 定向失效：审查必须晚于**这一版**任务。任务改过（updatedAt 前移）之后，
+      // 旧审查只证明旧版本，自动失效——这比要求人手"记得重审"可靠。
+      && item.reviewedAt >= task.updatedAt)
   })
   if (unreviewed.length > 0) {
     missing.push(`${unreviewed.length} 个已交付任务没有独立复核：${unreviewed.map((task) => task.taskId).join(', ')}（需另一名成员核对"是否做过、结论是否冲突"；本任务执行者自己的审查不算）`)
