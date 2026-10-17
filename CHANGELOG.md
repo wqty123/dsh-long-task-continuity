@@ -1,5 +1,38 @@
 # 变更记录
 
+## 0.2.5 — 2026-10-17
+
+### 修复生效审计（0.2.4）的四个已复现问题
+
+审计来源：`功能生效审计_0.2.4_20261017.md`（F1–F4 与类型基线）。
+
+**F1 · 质量链被权限挡死**。`context.assess` / `context.invalidateAssessment` / `context.applyRunPlan` / `context.applyActionOutcome` 原先只列在 supervisor 权限集，而质量链由插件机制以 **Lead/Member 身份**自驱动，每次评估必然停在 `role lead is not allowed to issue context.assess`。
+修法不是把请求升成 supervisor，而是**放开给 Actor 并加归属校验**：`assess` 要求 `freeze.sessionId === ctx.sessionId`；其余三个要求 `state.assessments[id].actorId === ctx.actorId`。跨会话与未绑定会话一律挡回。
+
+**F2 · 成员事件串账**。全局 `session/event` 收到任何 `team/member` 都写进"当前 Mission"，没核对来源。现在先验归属：`teamId` 必须等于本 Mission Lead 绑定的会话 id（原生 Team 以根会话组织），否则只记一条日志后返回。同时修掉成员键的稳定性——不再"`member-<name>` 已存在就跳过"，同名但不同会话加会话后缀，重建成员才拿得到身份。
+
+**F3 · 守卫范围过大**。`memberCreationGuard` 原先对"未绑定 Actor"一律拒绝，等于把"用原生 Team"的前提扩大成"所有会话都必须先被本插件纳管"。现在只在**已纳管但身份不是 Lead** 时拒绝；会话未知或未纳管一律放行，交给宿主自己的校验。
+
+**F4 · 复核判据只验"存在一条记录"**。
+- R4 排除**本任务的执行者**：自审不再能消掉"没有独立复核"。
+- R5 要求检索回执**晚于该任务第一次 attempt 开始**且 `coverage=complete` + `outcome=found`；"曾检索过一次"不算合格。
+- R6 要求 reviewer 记录**晚于最后一次交付**；审一条无关旧对象不再满足整体审核。
+
+**F5 · `Request.url` 类型依赖**。工作台路由原先直接读 `request.url`，在缺少 harness `typeRoots` 的依赖基线里类型检查失败。改为按最小形状取（`(request as { url?: string }).url`），缺失视为"未指定会话"。运行时不依赖该属性存在，行为不变。
+
+### 判据
+
+- 新增 `test/audit-f4.test.ts`：自审无效 / 独立审查有效 / 交付前旧审查无效，三条都直接打在 `missionCompletion` 上。
+- `test/v05-wiring-commands.test.ts` 增加 F1 判据：评估自己会话允许、跨会话挡回、未绑定会话挡回。
+- 更新 `test/r1-lead-only-spawn.test.ts` 与权限表用例到新语义。
+- 全量：**601 用例 / 599 通过 / 0 失败**；`tsc -p tsconfig.check-all.json` **0 错**。
+
+### 未完成（诚实记录）
+
+- **F2 没有单测**：`onTeamMemberEvent` 在组合层的闭包里，直接可测的只有 `teamMemberOf`（已有）。归属判据需按审计 §6.2 用生产入口验证：两个无关团队不能串账。
+- **G1–G4 未动**（原生 Team 唯一执行来源、语义判断与行动闭环、主动触发、纪律可移植性）——它们不属于本次"已复现问题"。
+- **真实模型回合、压缩与轮换仍未验收**。
+
 ## 0.2.4 — 2026-10-17
 
 ### 适配 DSH `0.2.1-rc.1`（宿主 `dsh-v0.2.1-alpha.1` → `dsh-v0.2.1-rc.1`）

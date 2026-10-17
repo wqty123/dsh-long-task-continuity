@@ -27,14 +27,12 @@ test('R1 非目标工具一律放行（否则会误伤全部工具调用）', ()
   assert.equal(guard({}), undefined)
 })
 
-test('R1 调用者会话未知 → 拒', () => {
-  const reason = guard({ name: 'spawn_teammate' })
-  assert.ok(reason !== undefined && reason.includes('会话未知'), String(reason))
+test('R1 调用者会话未知 → 放行（归属不可判定，交给宿主）', () => {
+  assert.equal(guard({ name: 'spawn_teammate' }), undefined)
 })
 
-test('R1 未入台账的会话 → 拒', () => {
-  const reason = guard({ name: 'spawn_teammate', agent: { id: 'sess-stranger' } })
-  assert.ok(reason !== undefined && reason.includes('未绑定 Actor'), String(reason))
+test('R1 未纳管的会话 → 放行（不把原生 Team 前提扩大成"必须先纳管"）', () => {
+  assert.equal(guard({ name: 'spawn_teammate', agent: { id: 'sess-stranger' } }), undefined)
 })
 
 test('R1 已入台账但不是 Lead → 拒', () => {

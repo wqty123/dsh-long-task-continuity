@@ -98,7 +98,7 @@ import { createTeamBoardSyncer, type BoardSyncResult, type TeamBoardLike } from 
 export const name = 'dsh-long-task-continuity'
 
 /** 与 `package.json` 同步维护。状态行要能回答"现在跑的是哪一版、从哪一份文件装载"（审阅 R8）。 */
-export const PLUGIN_VERSION = '0.2.4'
+export const PLUGIN_VERSION = '0.2.5'
 
 /** 只有这两个是硬依赖：没有存储就无所谓台账，没有命令注册表就没有 `/continuity`。 */
 export const inject = ['storageDomain', 'commands']
@@ -1008,10 +1008,21 @@ export function apply(ctx: Context, rawConfig: unknown): void {
       if (state === null) return
       const leadActorId = state.mission.leadActorId
       if (leadActorId === undefined || state.actors[leadActorId] === undefined) return
+      // 归属核对（F2）：原生 Team 以根会话组织（`TeamId(id: SessionId)`），而本 Mission 的 Lead
+      // 绑定在某个会话上。只有两者是同一个会话，这条成员事件才属于本 Mission。
+      // 缺这一步，任何团队发出的 `team/member` 都会写进当前台账——污染成员、团队、
+      // 并发配额与后续身份判断。
+      const leadSessionId = state.actors[leadActorId]?.sessionId
+      if (leadSessionId === undefined || teamId !== leadSessionId) {
+        logger.info(`${name}: 忽略外来成员事件（teamId=${teamId}，本 Mission Lead 会话=${leadSessionId ?? '未绑定'}）`)
+        return
+      }
       // 一个会话同一时刻只绑一个未退役 Actor（§3.3）：这个成员会话已经有身份就不动它。
       if (Object.values(state.actors).some((actor) => !actor.retired && actor.sessionId === member.id)) return
-      const actorId = `member-${member.name}`
-      if (state.actors[actorId] !== undefined) return
+      // 成员键：优先可读名；同名但不同会话（重建成员、另一批同名）加会话后缀区分。
+      // 不能用"键已存在就跳过"——那会让重建出来的成员永远拿不到身份。
+      const plainId = `member-${member.name}`
+      const actorId = state.actors[plainId] === undefined ? plainId : `member-${member.name}-${member.id.slice(-8)}`
       const supervisor: CommandContext = { actorId: 'supervisor', role: 'supervisor', now: Date.now() }
       // 并发上限：`team.configure` 是**整体覆盖**（`commands.ts:1450`），所以已有队伍必须沿用
       // 它自己的口径——成员出生不该把用户用 `/continuity team … <limit>` 设过的配额改掉。
@@ -1266,7 +1277,11 @@ export function apply(ctx: Context, rawConfig: unknown): void {
       if (state === null) return new Response('no mission record', { status: 404, headers: noStore })
       // 会话定位优先用页签带过来的 `?sessionId=`（右侧面板座椅是会话作用域的，
       // `sidebar.right.pane.tab` 的标准 prop 就是 sessionId），没有则回落到 Mission Lead 的绑定会话。
-      const requested = new URL(request.url).searchParams.get('sessionId')
+      // 不直接读 `request.url`：部分依赖基线的 `@types/node` 不带 undici 的 `Request.url` 声明，
+      // 会让没有 harness typeRoots 的环境类型检查失败。运行时该属性必然存在（web 标准），
+      // 这里按最小形状取，缺失即视为"未指定会话"。
+      const rawUrl = (request as { readonly url?: string }).url
+      const requested = rawUrl === undefined ? null : new URL(rawUrl, 'http://localhost').searchParams.get('sessionId')
       const leadSession = state.mission.leadActorId === undefined ? undefined : state.actors[state.mission.leadActorId]?.sessionId
       const sessionId = requested === null || requested.length === 0 ? leadSession : requested
       const native = await readNativeBoard(sessionId)

@@ -495,6 +495,12 @@ const ROLE_ALLOWED: Readonly<Record<ActorRole, ReadonlySet<CommandKind>>> = {
     'integration.receipt',
     'records.recordCoverage',
     'records.recordBrief',
+    // —— F1：质量链由插件机制自驱动，但调用者仍是 Actor 身份（不是 supervisor）。
+    // 归属校验在各自转换里：只能评估/操作**自己会话**的评估对象。 ——
+    'context.assess',
+    'context.invalidateAssessment',
+    'context.applyRunPlan',
+    'context.applyActionOutcome',
   ]),
   member: new Set<CommandKind>([
     'task.claim',
@@ -535,6 +541,11 @@ const ROLE_ALLOWED: Readonly<Record<ActorRole, ReadonlySet<CommandKind>>> = {
     'conjecture.close',
     'environment.register',
     'environment.revise',
+    // —— F1：同 lead，成员也只能操作自己会话的评估对象。 ——
+    'context.assess',
+    'context.invalidateAssessment',
+    'context.applyRunPlan',
+    'context.applyActionOutcome',
   ]),
   subagent: new Set<CommandKind>([
     'task.checkpoint',
@@ -2501,6 +2512,12 @@ export function transition(state: MissionControl, cmd: Command, ctx: CommandCont
     // —— v0.5 §27 上下文质量接口组：动作状态与失效判定在模块里，命令层只转发 ——
 
     case 'context.assess': {
+      // F1：非特权身份只能评估**自己会话**的上下文。评估对象是会话，跨会话评估既无意义，
+      // 也不该借这条命令改别人的账。特权身份（supervisor/user）不受此限。
+      if (ctx.role !== 'supervisor' && ctx.role !== 'user') {
+        const target = cmd.input.freeze.sessionId
+        if (target === undefined || target !== ctx.sessionId) return base
+      }
       // 幂等键由 requestId 派生（复审 N2 阶段 2）：同一条请求重放——含去重凭据与墓碑都被过期或
       // 容量淘汰之后——落到同一个 assessmentId 上。这里原地退回（返回 base = 无变化），
       // 不让它变成"同一份对象的第二版"；换 requestId 才代表新意图。
@@ -2511,6 +2528,8 @@ export function transition(state: MissionControl, cmd: Command, ctx: CommandCont
     }
 
     case 'context.invalidateAssessment': {
+      // F1：非特权身份只能操作自己的评估记录（评估的 actorId 就是它的归属）。
+      if (ctx.role !== 'supervisor' && ctx.role !== 'user' && base.assessments[cmd.assessmentId]?.actorId !== ctx.actorId) return base
       const result = invalidateAssessment(base, cmd.assessmentId, cmd.current, now)
       return result.ok ? result.state : base
     }
@@ -2521,11 +2540,15 @@ export function transition(state: MissionControl, cmd: Command, ctx: CommandCont
     }
 
     case 'context.applyRunPlan': {
+      // F1：非特权身份只能操作自己的评估记录（评估的 actorId 就是它的归属）。
+      if (ctx.role !== 'supervisor' && ctx.role !== 'user' && base.assessments[cmd.assessmentId]?.actorId !== ctx.actorId) return base
       const result = applyRunPlan(base, cmd.assessmentId, cmd.plan, now)
       return result.ok ? result.state : base
     }
 
     case 'context.applyActionOutcome': {
+      // F1：非特权身份只能操作自己的评估记录（评估的 actorId 就是它的归属）。
+      if (ctx.role !== 'supervisor' && ctx.role !== 'user' && base.assessments[cmd.assessmentId]?.actorId !== ctx.actorId) return base
       const result = applyActionOutcome(base, cmd.assessmentId, cmd.outcome, now)
       return result.ok ? result.state : base
     }

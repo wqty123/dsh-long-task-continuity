@@ -307,13 +307,14 @@ export function memberCreationGuard(
   return (execution: Readonly<{ readonly name?: string; readonly agent?: { readonly id?: unknown } }>): string | undefined => {
     if ((execution.name ?? '') !== 'spawn_teammate') return undefined
     const sessionId = sessionIdOf(execution.agent)
-    if (sessionId === undefined) {
-      return 'spawn_teammate 被拒：调用者会话未知；成员创建只允许由已入台账的 Lead 发起'
-    }
+    // 会话未知：无法判定归属，交给宿主自己的校验。本守卫只裁决"已纳管会话该不该创建成员"。
+    if (sessionId === undefined) return undefined
     const actor = actorOf(sessionId)
-    if (actor === undefined) {
-      return `spawn_teammate 被拒：会话 ${sessionId} 未绑定 Actor；只有已入台账的 Lead 能创建成员`
-    }
+    // 未绑定 Actor = 尚未纳管（没有 Mission，或该会话不在台账里）→ 放行。
+    // 否则等于把"使用原生 Team"的前提扩大成"所有会话都必须先被本插件纳管"，
+    // 而本插件默认不启用准入（enforceAdmission=false），不该产生这种全局副作用。
+    if (actor === undefined) return undefined
+    // 走到这里才是"已纳管但身份不对"——只有这一类该拒。
     if (actor.role !== 'lead') {
       return `spawn_teammate 被拒：只有 Lead 能创建成员（当前身份 ${actor.role}）`
     }

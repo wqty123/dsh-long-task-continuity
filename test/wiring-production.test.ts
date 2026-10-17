@@ -99,7 +99,9 @@ test('G3：工作台按会话定位读原生任务板，三种"读不到"分开'
   ], 'G3：原生板读取')
   const route = windowOf(INDEX_SOURCE, 'const workbenchRead = async', "const connection = service<ConnectionLike>('connection')", '工作台路由')
   assertContains(route, [
-    "new URL(request.url).searchParams.get('sessionId')",
+    // 不直接读 request.url：部分依赖基线的 @types/node 不带该声明，会让没有 harness typeRoots 的环境类型检查失败。
+    "const rawUrl = (request as { readonly url?: string }).url",
+    "new URL(rawUrl, 'http://localhost').searchParams.get('sessionId')",
     'state.mission.leadActorId',
     'readNativeBoard(sessionId)',
     'missionWorkbench(state, native)',

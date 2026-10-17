@@ -74,40 +74,66 @@ export function missionCompletion(state: MissionControl, optionalTaskIds: readon
   // 交付面：R4/R5/R6 共用同一批"已交付任务"作前提，先取一次。
   const delivered = required.filter((task) => task.status === 'submitted' || task.status === 'completed')
 
-  // R4：已交付但**没有独立复核**的任务。成员把一摊活做完、交给 Lead 之前，要有人核过
-  // "这件事之前是否做过、结论与之前是否冲突"——`versusHistory` 停在 unknown 等于没核
-  // （字段本身就分这三档：consistent / conflict / duplicate）。
-  const unreviewed = delivered.filter((task) => !Object.values(state.reviews).some(
-    (item) => item.targetKind === 'task' && item.targetId === task.taskId && item.versusHistory !== 'unknown',
-  ))
+  // R4：已交付但**没有独立复核**的任务。三个条件缺一不可：绑定本任务、
+  // `versusHistory` 不在 unknown、**审查者不是本任务的执行者**——否则执行者自审
+  // 就能消掉这条缺口，而它声称的正是"由另一名成员复核"。
+  const executorsOfTask = (taskId: string): ReadonlySet<string> => new Set(
+    Object.values(state.attempts).filter((attempt) => attempt.taskId === taskId).map((attempt) => attempt.actorId),
+  )
+  const unreviewed = delivered.filter((task) => {
+    const executors = executorsOfTask(task.taskId)
+    return !Object.values(state.reviews).some((item) =>
+      item.targetKind === 'task'
+      && item.targetId === task.taskId
+      && item.versusHistory !== 'unknown'
+      && !executors.has(item.reviewerActorId))
+  })
   if (unreviewed.length > 0) {
-    missing.push(`${unreviewed.length} 个已交付任务没有独立复核：${unreviewed.map((task) => task.taskId).join(', ')}（交付前需另一名成员核对"是否做过、结论是否冲突"）`)
+    missing.push(`${unreviewed.length} 个已交付任务没有独立复核：${unreviewed.map((task) => task.taskId).join(', ')}（需另一名成员核对"是否做过、结论是否冲突"；本任务执行者自己的审查不算）`)
   }
 
-  // R5：接了单却从没留下检索回执的执行者。"派单是**基于 audit** 的安排"这句话要有落点——
-  // 接收方自己核过，才算复核过这个安排。
+  // R5：执行者的检索回执必须**属于本次安排**。"曾检索过一次"不算合格：
+  // 回执时刻要晚于该任务第一次 attempt 的开始，且确实查到东西（complete + found）。
+  const startedAtOfTask = (taskId: string): number | undefined => {
+    const times = Object.values(state.attempts).filter((attempt) => attempt.taskId === taskId).map((attempt) => attempt.createdAt)
+    return times.length === 0 ? undefined : Math.min(...times)
+  }
+  const taskStartOfActor = (actorId: string): number | undefined => {
+    const times = required
+      .filter((task) => (task.currentAttemptId === undefined ? false : state.attempts[task.currentAttemptId]?.actorId === actorId))
+      .map((task) => startedAtOfTask(task.taskId))
+      .filter((at): at is number => at !== undefined)
+    return times.length === 0 ? undefined : Math.min(...times)
+  }
   const executors = [...new Set(
     required
       .map((task) => (task.currentAttemptId === undefined ? undefined : state.attempts[task.currentAttemptId]?.actorId))
       .filter((id): id is string => typeof id === 'string' && id.length > 0),
   )]
-  const blind = executors.filter((actorId) => !Object.values(state.searches).some((item) => item.recordedBy === actorId))
+  const blind = executors.filter((actorId) => {
+    const from = taskStartOfActor(actorId)
+    return !Object.values(state.searches).some((item) =>
+      item.recordedBy === actorId
+      && (from === undefined || item.observedAt >= from)
+      && item.coverage === 'complete'
+      && item.outcome === 'found')
+  })
   if (blind.length > 0) {
-    missing.push(`${blind.length} 名执行者没有登记过任何检索回执：${blind.join(', ')}（接单前需先核对这个安排是否基于 audit）`)
+    missing.push(`${blind.length} 名执行者没有本次安排有效的检索回执：${blind.join(', ')}（需 coverage=complete 且 outcome=found，时刻晚于任务开始）`)
   }
 
-  // R6：一个大任务收口前，要有 reviewer 成员对**整体结果**做过审核——这跟逐任务的验收不是
-  // 一回事：逐条判据属于 `criteriaReport`，这里要的是有人从整体上看过一遍。
-  // 只在**确有交付**时要求：空基线没有"整体结果"可审，干净清白的 Mission 也不欠谁一次审核。
+  // R6：确有交付时，收口前要有 **reviewer 身份**登记、且**晚于最后一次交付**的整体审核。
+  // 只要求"存在一条 reviewer 记录"不够——审一条无关旧 claim 也能满足。
   if (delivered.length > 0) {
     const reviews = Object.values(state.reviews)
     const reviewerIds = new Set(
       Object.values(state.actors).filter((actor) => !actor.retired && actor.role === 'reviewer').map((actor) => actor.actorId),
     )
+    const lastDelivery = Math.max(...delivered.map((task) => task.updatedAt))
     if (reviews.length === 0) {
       missing.push('Mission 收口前需由 reviewer 成员登记一次整体审核（当前没有任何审查记录）')
-    } else if (!reviews.some((item) => reviewerIds.has(item.reviewerActorId))) {
-      missing.push('现有审查记录不是由 reviewer 身份登记的：收口前需 reviewer 成员审核整体结果')
+    } else if (!reviews.some((item) => reviewerIds.has(item.reviewerActorId) && item.reviewedAt >= lastDelivery)) {
+      missing.push('没有任何 reviewer 审查发生在最后一次交付之后：收口前需 reviewer 成员审核本次交付的整体结果')
     }
   }
 

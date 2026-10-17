@@ -437,18 +437,32 @@ test('v0.5 权限表：越权角色在写盘之前被挡回，修订号不动', 
     { role: 'member', cmd: { kind: 'experiment.preregister', requestId: req(), draft: expDraft() }, why: '成员不能自己预登记试验契约' },
     { role: 'subagent', cmd: { kind: 'conjecture.capture', requestId: req(), draft: conjectureDraft('越权') }, why: '子代理不挂猜想生命周期' },
     { role: 'reviewer', cmd: { kind: 'exploration.release', requestId: req(), reason: '释放预留', recheck: '下个里程碑重看' }, why: '审查者不释放探索预留' },
-    { role: 'lead', cmd: { kind: 'context.assess', requestId: req(), input: assessInput(state, 'fp-denied') }, why: '上下文评估只由插件机制自驱动（本轮只开给 supervisor）' },
+    // F1 之后 `context.assess` 对 lead/member 是允许的，边界变成"只能评估自己会话"：
+    // 这里的 freeze.sessionId 是 sess-1，而该身份没有会话绑定，所以照样被挡回。
+    { role: 'lead', cmd: { kind: 'context.assess', requestId: req(), input: assessInput(state, 'fp-denied') }, why: '上下文评估只能针对自己会话（该身份无会话绑定，评估目标是 sess-1）' },
   ]
   for (const item of cases) {
     const result = dispatch(state, item.cmd, ctx(item.role, `${item.role}-1`))
     assert.equal(result.applied, false, item.why)
     if (result.applied) continue
-    assert.match(result.reason, /not allowed/)
+    // 两种都算"写盘之前被挡"：权限表拒绝（not allowed）与归属/领域检查拒绝（transition rejected）。
+    assert.match(result.reason, /not allowed|transition rejected/, `${item.cmd.kind}: ${result.reason}`)
     assert.equal(result.state.revision, state.revision, `${item.cmd.kind} 被拒时不能推进修订`)
   }
   // 对照：同一批命令在 supervisor 身份下不被权限门拦住（§27.1、§35.1）。
   const probe = dispatch(freshState(), { kind: 'context.assess', requestId: req(), input: assessInput(state, 'fp-probe') }, SUP)
   assert.equal(probe.applied, true, 'supervisor 必须能发 context.assess')
+})
+
+test('F1：非特权身份只能评估自己会话的上下文，跨会话与未绑定会话都挡回', () => {
+  const state = freshState()
+  // assessInput 的 freeze.sessionId 固定为 sess-1。
+  const own = { actorId: 'lead-1', role: 'lead' as const, sessionId: 'sess-1', now: NOW }
+  const foreign = { actorId: 'lead-1', role: 'lead' as const, sessionId: 'sess-2', now: NOW }
+  const unbound = { actorId: 'lead-1', role: 'lead' as const, now: NOW }
+  assert.equal(dispatch(state, { kind: 'context.assess', requestId: req(), input: assessInput(state, 'fp-own') }, own).applied, true, '评估自己会话应允许')
+  assert.equal(dispatch(state, { kind: 'context.assess', requestId: req(), input: assessInput(state, 'fp-foreign') }, foreign).applied, false, '评估别人的会话应挡回')
+  assert.equal(dispatch(state, { kind: 'context.assess', requestId: req(), input: assessInput(state, 'fp-unbound') }, unbound).applied, false, '会话未绑定时无法证明归属，应挡回')
 })
 
 /* ------------------------------------------------------------------ 3. 薄转发不变形 */
