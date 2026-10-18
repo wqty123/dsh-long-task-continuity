@@ -317,15 +317,18 @@ test('浏览器半：#52 页面只读——路由与宿主投影同源，且客�
   assert.equal(WORKBENCH_PATH, '/api/continuity.workspace')
   assert.ok(CLIENT_SOURCE.includes(`"${WORKBENCH_PATH.replace(/^\//, '')}"`), 'client.js 必须以文档相对形式引用同一路由')
   assert.ok(CLIENT_SOURCE.includes(`"${WORKBENCH_ID}"`), 'client.js 页签 id 须与宿主投影的 WORKBENCH_KIND 同字面量')
-  assert.equal(/\bmethod\s*:/.test(CLIENT_SOURCE), false, '客户端不得携带写方法')
-  // 只读面有两处：工作台投影与纪律投影。断言不再是"只有一处"，
-  // 而是"每一处都指向只读投影路由"——比数量更能防住写入型请求混进来。
+  // 客户端有三处 fetch：工作台投影（读）、纪律（读）、纪律（写）。
+  // 写方法只允许出现一次，且必须是 POST 并落在纪律路由上——纪律是唯一有意开放的写面，
+  // 台账与工作台投影仍然只读。
   const fetches = CLIENT_SOURCE.split('\n').filter((line) => line.includes('fetch('))
-  assert.equal(fetches.length, 2, '只读面共两处 fetch：工作台投影与纪律投影')
+  assert.equal(fetches.length, 4, '工作台投影 + 纪律读 + 纪律写 + 上下文读数')
   for (const line of fetches) {
     assert.ok(
-      line.includes('WORKBENCH_PATH') || line.includes('DISCIPLINE_PATH'),
-      '每一处 fetch 都必须指向只读投影路由：' + line.trim(),
+      line.includes('WORKBENCH_PATH') || line.includes('DISCIPLINE_PATH') || line.includes('CONTEXT_PATH'),
+      '每一处 fetch 都必须指向投影/纪律/上下文路由：' + line.trim(),
     )
   }
+  const writes = CLIENT_SOURCE.split('\n').filter((line) => /\bmethod\s*:/.test(line))
+  assert.equal(writes.length, 1, '只允许一处写方法（纪律写回）')
+  assert.ok(writes[0]?.includes('"POST"'), '写方法只能是 POST：' + String(writes[0]).trim())
 })

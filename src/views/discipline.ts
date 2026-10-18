@@ -123,3 +123,46 @@ export function disciplineView(
     ],
   }
 }
+/* ------------------------------------------------------------------ 写回 */
+
+/**
+ * 写回纪律文件的校验（纯判断，落盘交给装配层）。
+ *
+ * 三道闸，缺一不可：
+ * 1. **并发保护**：请求必须带上它读到的那一版的 sha256；不匹配就拒——否则两个人同时编辑，
+ *    后保存的会静默吃掉前一个人的改动。
+ * 2. **不许写空**：空文件等于把纪律删了，而它每轮注入，删了没人会发现。
+ * 3. **必须能对照**：当前文件读不到就不让写（否则会凭空造出一份没人核对过的纪律）。
+ *
+ * 落盘前装配层还要备份；备份路径回给调用方，出问题能拿回来。
+ */
+export function validateDisciplineWrite(
+  current: { readonly text: string } | undefined,
+  request: { readonly text?: unknown; readonly expectedSha256?: unknown },
+): { readonly ok: true; readonly text: string } | { readonly ok: false; readonly reason: string } {
+  if (current === undefined) {
+    return { ok: false, reason: '当前读不到纪律文件：先确认 $DSH_HOME/AGENTS.md 存在，再谈写回' }
+  }
+  const text = typeof request.text === 'string' ? request.text : ''
+  if (text.trim().length === 0) {
+    return { ok: false, reason: '纪律不能写成空：它每轮注入，写空等于静默删掉整份纪律' }
+  }
+  const expected = typeof request.expectedSha256 === 'string' ? request.expectedSha256 : ''
+  if (expected.length === 0) {
+    return { ok: false, reason: '缺少 expectedSha256：没有它就无法判断这次写回是否覆盖了别人的改动' }
+  }
+  const actual = createHash('sha256').update(current.text, 'utf8').digest('hex')
+  if (actual !== expected) {
+    return {
+      ok: false,
+      reason: `文件已被改动（磁盘现在是 ${actual.slice(0, 12)}，请求基于 ${expected.slice(0, 12)}）：刷新面板后重试，避免覆盖别人的修改`,
+    }
+  }
+  return { ok: true, text }
+}
+
+/** 备份文件名：同目录下按时间戳排，不用随机名，便于人工按时间找。 */
+export function disciplineBackupName(now: Date): string {
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `AGENTS.${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.md`
+}

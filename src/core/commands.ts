@@ -211,6 +211,7 @@ export type CommandKind =
   | 'dependency.register'
   | 'dispatch.plan'
   | 'review.record'
+  | 'review.recordBatch'
   | 'incident.record'
   | 'delivery.confirm'
   | 'propagation.resolve'
@@ -324,6 +325,7 @@ const ROLE_ALLOWED: Readonly<Record<ActorRole, ReadonlySet<CommandKind>>> = {
     'dependency.register',
     'dispatch.plan',
     'review.record',
+    'review.recordBatch',
     'incident.record',
     'delivery.confirm',
     'propagation.resolve',
@@ -458,6 +460,7 @@ const ROLE_ALLOWED: Readonly<Record<ActorRole, ReadonlySet<CommandKind>>> = {
     'dependency.register',
     'dispatch.plan',
     'review.record',
+    'review.recordBatch',
     'incident.record',
     'delivery.confirm',
     'actor.dormant',
@@ -527,6 +530,7 @@ const ROLE_ALLOWED: Readonly<Record<ActorRole, ReadonlySet<CommandKind>>> = {
     'dependency.register',
     'dispatch.plan',
     'review.record',
+    'review.recordBatch',
     'incident.record',
     'delivery.confirm',
     'actor.dormant',
@@ -572,6 +576,7 @@ const ROLE_ALLOWED: Readonly<Record<ActorRole, ReadonlySet<CommandKind>>> = {
     'team.message',
     'artifact.attachEvidence',
     'review.record',
+    'review.recordBatch',
     'evidence.record',
     'claim.propose',
     'challenge.raise',
@@ -695,6 +700,8 @@ export type Command =
   | { readonly kind: 'dependency.register'; readonly requestId: string; readonly dependency: DependencyInput }
   | { readonly kind: 'dispatch.plan'; readonly requestId: string; readonly dispatch: DispatchInput }
   | { readonly kind: 'review.record'; readonly requestId: string; readonly review: ReviewInput }
+  /** 批审：一次请求登记多条审查。校验口径与逐条 `review.record` 完全一致，只是省掉往返。 */
+  | { readonly kind: 'review.recordBatch'; readonly requestId: string; readonly reviews: readonly ReviewInput[] }
   | { readonly kind: 'incident.record'; readonly requestId: string; readonly incident: IncidentInput; readonly ruleCandidate?: RuleInput }
   | { readonly kind: 'delivery.confirm'; readonly requestId: string; readonly deliveryId: DeliveryId; readonly stage: DeliveryEntry['stage']; readonly handling?: HandlingState; readonly reason?: string }
   /** 传播积压的人工收尾（§22.6）：核对完成后按 id 或目标裁定，理由必填、事件留痕。 */
@@ -2313,6 +2320,25 @@ export function transition(state: MissionControl, cmd: Command, ctx: CommandCont
       if (base.reviews[reviewId] !== undefined) return base
       const record: ReviewReceipt = { ...input, reviewId, missionId: base.missionId, reviewerActorId: ctx.actorId, reviewedAt: now }
       return note({ ...base, reviews: { ...base.reviews, [reviewId]: record } }, 'review/recorded', { reviewId, targetKind: record.targetKind, targetId: record.targetId, selfConsistent: record.selfConsistent, versusHistory: record.versusHistory }, now)
+    }
+
+    case 'review.recordBatch': {
+      // 批审的语义与逐条 `review.record` **完全相同**：同校验、同独立性口径、同 id 派生规则。
+      // 唯一差别是一次往返。**任一条不合法就整批不写**——半批写入会让调用方以为整批成了，
+      // 而缺的那几条恰恰是它最需要知道的。
+      if (cmd.reviews.length === 0) return base
+      const batch: Record<string, ReviewReceipt> = { ...base.reviews }
+      for (let index = 0; index < cmd.reviews.length; index += 1) {
+        const input = cmd.reviews[index]
+        if (input === undefined) return base
+        if (input.targetId.trim().length === 0 || input.methodRef.trim().length === 0) return base
+        const notIndependent = input.sharedEvidenceIds.length > 0 || input.sawReferenceAnswer
+        if (notIndependent && input.independenceNote.trim().length === 0) return base
+        const reviewId = derivedId('rvw', `${cmd.requestId}:${index}`)
+        if (batch[reviewId] !== undefined) return base
+        batch[reviewId] = { ...input, reviewId, missionId: base.missionId, reviewerActorId: ctx.actorId, reviewedAt: now }
+      }
+      return note({ ...base, reviews: batch }, 'review/recorded-batch', { count: cmd.reviews.length }, now)
     }
 
     case 'incident.record': {

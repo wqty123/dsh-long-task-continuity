@@ -22,7 +22,8 @@
  *    compaction-basic 自己的 volatile config，`packages/compaction/compaction-basic/src/config.ts:75`），
  *    未声明 ⇒ `observation`，自动侧不换会话（§10.1 fail-closed 规则一）。手动 `/continuity rotate` 不走这条判定。
  */
-import { mkdirSync, readFileSync, statSync } from 'node:fs'
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -93,20 +94,26 @@ import { compactionPort, type CompactionEngineLike } from './adapter/compaction.
 import { frameFromReadings, postCompactionObservation, retentionListFromState, runQualityChain } from './adapter/quality-runner.ts'
 import { missionLedger, renderMissionMarkdown, renderRecoveryMarkdown, renderTimelineMarkdown } from './views/export.ts'
 import { WORKBENCH_PATH, missionWorkbench, type WorkbenchNativeInput } from './views/workbench.ts'
-import { DISCIPLINE_PATH, disciplineView } from './views/discipline.ts'
+import { DISCIPLINE_PATH, disciplineBackupName, disciplineView, validateDisciplineWrite } from './views/discipline.ts'
 import { createTeamBoardSyncer, type BoardSyncResult, type TeamBoardLike } from './team/board-sync.ts'
 
 /** Loader 诊断名，与 `cordis.patch.yml` 的行 id 一致。 */
 export const name = 'dsh-long-task-continuity'
 
 /** 与 `package.json` 同步维护。状态行要能回答"现在跑的是哪一版、从哪一份文件装载"（审阅 R8）。 */
-export const PLUGIN_VERSION = '0.2.9'
+export const PLUGIN_VERSION = '0.3.0'
 
 /** 只有这两个是硬依赖：没有存储就无所谓台账，没有命令注册表就没有 `/continuity`。 */
 export const inject = ['storageDomain', 'commands']
 
 /** Connection 共享通道上的只读台账路由；浏览器侧用去掉前导斜杠的文档相对形式 `api/continuity.ledger`。 */
 export const LEDGER_PATH = '/api/continuity.ledger'
+
+/** 纪律面板：读 + 写 `$DSH_HOME/AGENTS.md`（写回前备份、带 sha256 并发保护）。 */
+export const DISCIPLINE_SERVICE_PATH = '/api/continuity.discipline'
+
+/** 上下文读数：占用、轮换线、判决（该压缩 / 该轮换 / 都不动）与卡住的闸门。 */
+export const CONTEXT_PATH = '/api/continuity.context'
 
 /**
  * 设置项。每个字段都 `.default()` 且 `.volatile()`：
@@ -1295,18 +1302,88 @@ export function apply(ctx: Context, rawConfig: unknown): void {
       process.env['DSH_HOME'] ?? join(homedir(), 'dsh-home'),
       'AGENTS.md',
     )
-    const disciplineRead = async (): Promise<Response> => Response.json(
-      disciplineView(disciplineFile, () => {
-        try {
-          const stat = statSync(disciplineFile)
-          if (!stat.isFile()) return undefined
-          return { text: readFileSync(disciplineFile, 'utf8'), modifiedAt: stat.mtime.toISOString() }
-        } catch {
-          return undefined
-        }
-      }),
-      { headers: noStore },
-    )
+    const readDisciplineSource = (): { readonly text: string; readonly modifiedAt: string } | undefined => {
+      try {
+        const stat = statSync(disciplineFile)
+        if (!stat.isFile()) return undefined
+        return { text: readFileSync(disciplineFile, 'utf8'), modifiedAt: stat.mtime.toISOString() }
+      } catch {
+        return undefined
+      }
+    }
+    /**
+     * 纪律路由：GET 读、POST 写。
+     *
+     * 写回是**改每轮注入的内容**，所以三道闸都在服务端执行，不依赖客户端自觉：
+     * sha256 并发比对、不许写空、落盘前先备份。客户端只能决定"写什么"，
+     * 不能决定"要不要校验"。
+     */
+    const disciplineRoute = async (request: Request): Promise<Response> => {
+      if (request.method !== 'POST') {
+        return Response.json(disciplineView(disciplineFile, readDisciplineSource), { headers: noStore })
+      }
+      let body: unknown
+      try {
+        body = await request.json()
+      } catch {
+        return Response.json({ ok: false, reason: '请求体不是合法 JSON' }, { status: 400, headers: noStore })
+      }
+      const payload = (body ?? {}) as { readonly text?: unknown; readonly expectedSha256?: unknown }
+      const current = readDisciplineSource()
+      const checked = validateDisciplineWrite(current, payload)
+      if (!checked.ok) return Response.json({ ok: false, reason: checked.reason }, { status: 409, headers: noStore })
+      if (current === undefined) return Response.json({ ok: false, reason: '读不到当前文件' }, { status: 409, headers: noStore })
+      const dshHome = process.env['DSH_HOME'] ?? join(homedir(), 'dsh-home')
+      const backupDir = join(dshHome, '.discipline-backup')
+      const backupPath = join(backupDir, disciplineBackupName(new Date()))
+      try {
+        mkdirSync(backupDir, { recursive: true })
+        writeFileSync(backupPath, current.text, 'utf8')
+        writeFileSync(disciplineFile, checked.text, 'utf8')
+      } catch (error) {
+        return Response.json({ ok: false, reason: `写入失败：${String(error)}` }, { status: 500, headers: noStore })
+      }
+      const bytes = Buffer.byteLength(checked.text, 'utf8')
+      logger.info(`${name}: 纪律已写回 ${disciplineFile}（${bytes} 字节），备份 ${backupPath}；新会话生效`)
+      return Response.json(
+        { ok: true, sha256: createHash('sha256').update(checked.text, 'utf8').digest('hex'), bytes, backupPath },
+        { headers: noStore },
+      )
+    }
+    /**
+     * 上下文读数面板的数据面。
+     *
+     * 面板要回答的是"**现在到底该不该压缩/轮换，卡在哪**"——这正是 `pressureVerdict` 的输出。
+     * 没有会话定位就不猜：占用是按会话算的，拿别的会话的读数冒充更糟。
+     */
+    const contextRead = async (request: Request): Promise<Response> => {
+      const rawUrl = (request as { readonly url?: string }).url
+      const requested = rawUrl === undefined ? null : new URL(rawUrl, 'http://localhost').searchParams.get('sessionId')
+      if (requested === null || requested.length === 0) {
+        return Response.json({ available: false, reason: '页签未绑定会话：占用按会话算，没有定位就不猜' }, { headers: noStore })
+      }
+      try {
+        const settings = settingsOf()
+        const session = sessionObject(requested)
+        const occupancy = occupancyOf(session)
+        const readings = contextReadingsOf(session, settings)
+        const line = rotationLine(lineInput(occupancy.contextWindow, settings, readings))
+        const verdict = pressureVerdict({ readings, handoffMarginTokens: settings.handoffMarginTokens, rotateRatio: settings.rotateRatio })
+        return Response.json({
+          available: true,
+          sessionId: requested,
+          ratio: occupancy.ratio,
+          projectedTokens: occupancy.projectedTokens,
+          contextWindow: occupancy.contextWindow,
+          clampMismatch: occupancy.clampMismatch === true,
+          rotationLine: { mode: line.mode, T: line.T, reason: line.reason ?? '' },
+          verdict: { kind: verdict.verdict, holdingGate: verdict.holdingGate, reasons: verdict.reasons },
+          notes: readings.notes,
+        }, { headers: noStore })
+      } catch (error) {
+        return Response.json({ available: false, reason: `读数失败：${String(error)}` }, { headers: noStore })
+      }
+    }
     const connection = service<ConnectionLike>('connection')
     if (connection === undefined) {
       logger.warn(`${name}: connection 服务未装载，台账面板没有读取通道。`)
@@ -1320,8 +1397,14 @@ export function apply(ctx: Context, rawConfig: unknown): void {
         }
       }
       try {
-        routeDisposers.push(connection.fetch.register({ path: DISCIPLINE_PATH, methods: ['GET'], requestBody: 'buffered', fetch: disciplineRead }))
-        logger.info(`${name}: 已注册只读纪律路由 ${DISCIPLINE_PATH}。`)
+        routeDisposers.push(connection.fetch.register({ path: DISCIPLINE_PATH, methods: ['GET', 'POST'], requestBody: 'buffered', fetch: disciplineRoute }))
+        logger.info(`${name}: 已注册纪律路由 ${DISCIPLINE_PATH}（GET 读 / POST 写，写入前备份）。`)
+      } catch (error) {
+        logger.warn(`${name}: 纪律路由 ${DISCIPLINE_PATH} 注册失败：${String(error)}`)
+      }
+      try {
+        routeDisposers.push(connection.fetch.register({ path: CONTEXT_PATH, methods: ['GET'], requestBody: 'buffered', fetch: contextRead }))
+        logger.info(`${name}: 已注册只读上下文路由 ${CONTEXT_PATH}。`)
       } catch (error) {
         logger.warn(`${name}: 纪律路由 ${DISCIPLINE_PATH} 注册失败：${String(error)}`)
       }

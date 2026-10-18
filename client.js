@@ -183,6 +183,22 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 		"disc.evidence": "证据",
 		"disc.measured": "实测",
 		"disc.inferred": "同路径未单独实测",
+		"disc.edit": "编辑",
+		"disc.save": "保存",
+		"disc.saving": "写入中",
+		"disc.cancel": "取消",
+		"disc.editHint": "写回 $DSH_HOME/AGENTS.md（落盘前自动备份）。新会话生效；当前会话沿用已加载的那一版。",
+		"wb.group.context": "上下文读数",
+		"ctx.unavailable": "没有会话定位",
+		"ctx.ratio": "占用",
+		"ctx.projected": "投影",
+		"ctx.window": "窗口",
+		"ctx.verdict.compact": "该压缩",
+		"ctx.verdict.rotate": "该在会话内另开一个会话",
+		"ctx.verdict.hold": "都不动",
+		"ctx.gate": "卡住自动侧",
+		"ctx.gate.none": "无（判决已算出）",
+		"ctx.line": "轮换线",
 		"wb.count.taskTotal": "任务",
 		"wb.count.completedNow": "完成",
 		"wb.count.blocked": "阻塞",
@@ -386,6 +402,22 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 		"disc.evidence": "Evidence",
 		"disc.measured": "measured",
 		"disc.inferred": "same path, not separately measured",
+		"disc.edit": "Edit",
+		"disc.save": "Save",
+		"disc.saving": "Saving",
+		"disc.cancel": "Cancel",
+		"disc.editHint": "Writes back to $DSH_HOME/AGENTS.md (backed up first). New sessions pick it up; the current session keeps the baseline it already loaded.",
+		"wb.group.context": "Context readings",
+		"ctx.unavailable": "No session anchor",
+		"ctx.ratio": "Usage",
+		"ctx.projected": "projected",
+		"ctx.window": "window",
+		"ctx.verdict.compact": "should compact",
+		"ctx.verdict.rotate": "should rotate into a new session",
+		"ctx.verdict.hold": "hold",
+		"ctx.gate": "auto side held by",
+		"ctx.gate.none": "none (verdict computed)",
+		"ctx.line": "rotation line",
 		"wb.count.taskTotal": "tasks",
 		"wb.count.completedNow": "done",
 		"wb.count.blocked": "blocked",
@@ -783,6 +815,8 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 	const WORKBENCH_PATH = "api/continuity.workspace";
 	// 纪律面板：读磁盘上的 $DSH_HOME/AGENTS.md（服务端现读现算指纹），不是插件内副本。
 	const DISCIPLINE_PATH = "api/continuity.discipline";
+	// 上下文读数：占用 / 轮换线 / 判决 / 卡住的闸门。
+	const CONTEXT_PATH = "api/continuity.context";
 	const WORKBENCH_POLL_MS = 15000;
 	const TASK_FILTERS = ["attention", "all", "active", "review", "blocked", "completed", "failed", "cancelled", "needsReview"];
 	const ACTIVE_STATUSES = ["planned", "ready", "leased", "running", "retry_wait"];
@@ -854,6 +888,23 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 		return await response.json();
 	}
 
+	async function readContext(signal, sessionId) {
+		const query = sessionId === undefined || sessionId === "" ? "" : "?sessionId=" + encodeURIComponent(sessionId);
+		const response = await fetch(CONTEXT_PATH + query, { signal, cache: "no-store", headers: { accept: "application/json" } });
+		if (!response.ok) throw new Error("HTTP " + response.status);
+		return await response.json();
+	}
+
+	// 写回纪律：带上读到的 sha256，服务端据此拒掉"基于旧版本"的保存，避免覆盖别人的改动。
+	async function writeDiscipline(text, expectedSha256) {
+		const response = await fetch(DISCIPLINE_PATH, {
+			method: "POST",
+			headers: { "content-type": "application/json", accept: "application/json" },
+			body: JSON.stringify({ text, expectedSha256 }),
+		});
+		return await response.json();
+	}
+
 	function wbChip(label, tone, key) {
 		return h("span", { key, className: "ltc-wbChip", "data-tone": tone }, label);
 	}
@@ -919,6 +970,14 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 		const [read, setRead] = useState({ phase: "loading", data: null, error: "" });
 		// 纪律面板独立于台账：没有 Mission 时也要能看出"纪律从哪来、有没有进上下文"。
 		const [discipline, setDiscipline] = useState(null);
+		// 上下文读数：跟会话走，页签切换会话就重读。
+		const [context, setContext] = useState(null);
+		// 编辑态：草稿 + 写入中 + 错误/回执。写入要带 sha256，服务端据此拒掉基于旧版本的保存。
+		const [editing, setEditing] = useState(false);
+		const [draft, setDraft] = useState("");
+		const [saving, setSaving] = useState(false);
+		const [saveError, setSaveError] = useState("");
+		const [savedNotice, setSavedNotice] = useState("");
 		const [filter, setFilter] = useState("attention");
 		const [openRows, setOpenRows] = useState({});
 		const [now, setNow] = useState(() => Date.now());
@@ -954,6 +1013,13 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 				setDiscipline(value);
 			}).catch(() => { /* 读不到就保持空态，不把错误塞进台账区 */ });
 		}, [tab.signal]);
+
+		useEffect(() => {
+			readContext(tab.signal, sessionId).then((value) => {
+				if (tab.signal.aborted) return;
+				setContext(value);
+			}).catch(() => { /* 读不到保持空态 */ });
+		}, [tab.signal, sessionId]);
 
 		const data = read.phase === "ready" ? read.data : null;
 		const jump = (sessionId) => { if (openWorkspaceSession !== null) openWorkspaceSession(sessionId); };
@@ -1158,20 +1224,67 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 			);
 		}
 
+		const saveDiscipline = useCallback(() => {
+			if (discipline === null) return;
+			setSaving(true);
+			setSaveError("");
+			writeDiscipline(draft, discipline.sha256).then((out) => {
+				if (out === null || typeof out !== "object" || out.ok !== true) {
+					setSaveError(String((out && out.reason) || "写入失败"));
+					return undefined;
+				}
+				return readDiscipline(tab.signal).then((fresh) => {
+					setDiscipline(fresh);
+					setEditing(false);
+					setSavedNotice(t("disc.editHint"));
+				});
+			}).catch((error) => {
+				setSaveError(String((error && error.message) || error));
+			}).finally(() => {
+				setSaving(false);
+			});
+		}, [discipline, draft, tab.signal, t]);
+
 		// —— 两块纪律面板 ——
 		// 面板一「纪律（当前生效）」：磁盘原文 + 指纹，可核对，不是插件内副本。
 		// 面板二「注入确认」：三类身份各自走哪条链路、是否实测过；推断不写成事实。
 		const disciplineView = discipline === null ? null : h(react.Fragment, null,
 			h("div", { className: "ltc-wbBody" },
-				h("div", { className: "ltc-wbRowHead" }, wbChip(t("wb.group.discipline"), "neutral", "discipline")),
+				h("div", { className: "ltc-wbRowHead" },
+					wbChip(t("wb.group.discipline"), "neutral", "discipline"),
+					h("span", { className: "ltc-wbSpacer" }),
+					editing
+						? h(react.Fragment, null,
+							h("button", { key: "save", className: "ltc-wbRefresh", type: "button", disabled: saving, onClick: () => { saveDiscipline(); } },
+								saving ? t("disc.saving") : t("disc.save")),
+							h("button", { key: "cancel", className: "ltc-wbRefresh", type: "button", disabled: saving, onClick: () => { setEditing(false); setSaveError(""); } },
+								t("disc.cancel")))
+						: h("button", {
+							key: "edit",
+							className: "ltc-wbRefresh",
+							type: "button",
+							disabled: !discipline.present,
+							onClick: () => { setDraft(discipline.text); setEditing(true); setSaveError(""); setSavedNotice(""); },
+						}, t("disc.edit"))),
 				h("div", { className: "ltc-wbMuted" }, t("disc.source") + " " + discipline.sourcePath),
 				h("div", { className: "ltc-wbMuted" }, discipline.present
 					? t("disc.sha") + " " + discipline.sha256.slice(0, 16) + " · " + t("disc.bytes") + " " + discipline.bytes + " · " + t("disc.modified") + " " + discipline.modifiedAt
 					: t("disc.missing")),
-				discipline.present ? h("div", { className: "ltc-wbList" }, discipline.sections.map((item) =>
-					h("div", { key: item.title, className: "ltc-wbRow" },
-						h("div", { className: "ltc-wbRowHead" }, wbChip(item.title, "neutral", "sec")),
-						h("div", { className: "ltc-wbMuted" }, item.lines.join(" · "))))) : null,
+				editing
+					? h("textarea", {
+						key: "editor",
+						value: draft,
+						spellCheck: false,
+						onChange: (event) => { setDraft(event.target.value); },
+						style: { width: "100%", minHeight: "320px", fontFamily: "ui-monospace, monospace", fontSize: "12px", lineHeight: "1.5" },
+					})
+					: (discipline.present ? h("div", { className: "ltc-wbList" }, discipline.sections.map((item) =>
+						h("div", { key: item.title, className: "ltc-wbRow" },
+							h("div", { className: "ltc-wbRowHead" }, wbChip(item.title, "neutral", "sec")),
+							h("div", { className: "ltc-wbMuted" }, item.lines.join(" · "))))) : null),
+				editing ? h("div", { className: "ltc-wbMuted" }, t("disc.editHint")) : null,
+				saveError === "" ? null : h("div", { className: "ltc-wbMuted" }, saveError),
+				savedNotice === "" ? null : h("div", { className: "ltc-wbMuted" }, savedNotice),
 			),
 			h("div", { className: "ltc-wbBody" },
 				h("div", { className: "ltc-wbRowHead" }, wbChip(t("wb.group.injection"), "neutral", "injection")),
@@ -1186,7 +1299,34 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 			),
 		);
 
-		return h("div", { className: "ltc-wbRoot" }, header, body, disciplineView);
+		// —— 上下文读数面板 ——
+		// 面板存在的意义是回答"现在该不该压缩/轮换、卡在哪"，而不是显示一串数字。
+		const contextView = context === null ? null : h("div", { className: "ltc-wbBody" },
+			h("div", { className: "ltc-wbRowHead" }, wbChip(t("wb.group.context"), "neutral", "context")),
+			context.available !== true
+				? h("div", { className: "ltc-wbMuted" }, String(context.reason || t("ctx.unavailable")))
+				: h(react.Fragment, null,
+					h("div", { className: "ltc-wbMuted" },
+						t("ctx.ratio") + " " + (context.ratio === null || context.ratio === undefined ? t("wb.unknown") : (context.ratio * 100).toFixed(1) + "%") +
+						" · " + t("ctx.projected") + " " + (context.projectedTokens === null || context.projectedTokens === undefined ? t("wb.unknown") : context.projectedTokens) +
+						" / " + t("ctx.window") + " " + (context.contextWindow === null || context.contextWindow === undefined ? t("wb.unknown") : context.contextWindow) +
+						(context.clampMismatch === true ? " ⚠ 投影超过声明窗口" : "")),
+					h("div", { className: "ltc-wbRowHead" },
+						wbChip(
+							context.verdict && context.verdict.kind === "compact" ? t("ctx.verdict.compact")
+								: context.verdict && context.verdict.kind === "rotate" ? t("ctx.verdict.rotate")
+									: t("ctx.verdict.hold"),
+							context.verdict && (context.verdict.kind === "compact" || context.verdict.kind === "rotate") ? "warn" : "muted",
+							"verdict")),
+					h("div", { className: "ltc-wbMuted" },
+						t("ctx.gate") + " " + (context.verdict && context.verdict.holdingGate && context.verdict.holdingGate !== "none" ? context.verdict.holdingGate : t("ctx.gate.none"))),
+					h("div", { className: "ltc-wbMuted" },
+						t("ctx.line") + " " + String((context.rotationLine && context.rotationLine.mode) || "?") +
+						(context.rotationLine && context.rotationLine.T !== null && context.rotationLine.T !== undefined ? " T=" + context.rotationLine.T : "")),
+				),
+		);
+
+		return h("div", { className: "ltc-wbRoot" }, header, body, contextView, disciplineView);
 	}
 
 	function ContinuityWorkbenchTitle(props) {
