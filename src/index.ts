@@ -101,7 +101,7 @@ import { createTeamBoardSyncer, type BoardSyncResult, type TeamBoardLike } from 
 export const name = 'dsh-long-task-continuity'
 
 /** 与 `package.json` 同步维护。状态行要能回答"现在跑的是哪一版、从哪一份文件装载"（审阅 R8）。 */
-export const PLUGIN_VERSION = '0.3.0'
+export const PLUGIN_VERSION = '0.3.1'
 
 /** 只有这两个是硬依赖：没有存储就无所谓台账，没有命令注册表就没有 `/continuity`。 */
 export const inject = ['storageDomain', 'commands']
@@ -450,6 +450,8 @@ const EXTERNAL_PHASES = ['accepted', 'processing', 'succeeded', 'failed', 'unkno
 const FIX_KINDS = ['state_field', 'error_default', 'execution_wrapper', 'reject_counterexample', 'process'] as const
 const ARTIFACT_ATTRIBUTIONS = ['tool_operation', 'native_identity', 'observed', 'reconciled', 'unknown'] as const
 const REVIEW_TARGET_KINDS = ['task', 'artifact', 'claim', 'verification'] as const
+/** 审查用途词表：三处边界各审一件事，不能拿一种审核顶另一种。 */
+const REVIEW_PURPOSES = ['dispatch', 'delivery', 'integration'] as const
 const VERSUS_HISTORY = ['consistent', 'conflict', 'duplicate', 'unknown'] as const
 const DELIVERY_STAGES = ['produced', 'registered', 'dispatched', 'received', 'processed', 'unrouted'] as const
 
@@ -2217,7 +2219,7 @@ export function apply(ctx: Context, rawConfig: unknown): void {
         }
         // —— review.record ——
         case 'review': {
-          const [targetKind = '', targetId = '', methodRef = '', selfConsistent = '', versusHistory = '', targetRevRaw = '', sharedRaw = '', sawRefRaw = '', independenceNote = '', novelty = ''] = sect(10)
+          const [targetKind = '', targetId = '', methodRef = '', selfConsistent = '', versusHistory = '', targetRevRaw = '', sharedRaw = '', sawRefRaw = '', independenceNote = '', novelty = '', purposeRaw = ''] = sect(11)
           if (targetId.trim().length === 0 || methodRef.trim().length === 0) return bad('用法：/continuity review <目标类型> <目标ID> <方法引用> <自洽结果pass|fail|unknown|error|not_run|not_applicable> <历史对照consistent|conflict|duplicate|unknown> [| 目标修订 | 共享证据,… | 见过参考答案true|false | 独立性说明 | 新意]（目标类型：task|artifact|claim|verification；方法引用与目标 ID 必填，§22.9）')
           if (!oneOf(targetKind, REVIEW_TARGET_KINDS)) return bad('审查目标类型不在词表：task|artifact|claim|verification')
           if (!oneOf(selfConsistent, VERIFICATION_OUTCOMES)) return bad('自洽结果不在验收词表：pass|fail|unknown|error|not_run|not_applicable')
@@ -2228,9 +2230,13 @@ export function apply(ctx: Context, rawConfig: unknown): void {
           // 共用证据或见过参考答案＝非独立，必须说明独立性（§22.9）。
           if ((sharedEvidenceIds.length > 0 || sawReferenceAnswer) && independenceNote.trim().length === 0) return bad('共用证据或见过参考答案时必须写明独立性说明，否则内核退回（§22.9）')
           const targetRevision = intArg(targetRevRaw)
+          const purpose = purposeRaw.trim().length === 0 ? undefined : purposeRaw.trim()
+          if (purpose !== undefined && !oneOf(purpose, REVIEW_PURPOSES)) return bad('审查用途不在词表：dispatch|delivery|integration（缺省按 delivery）')
           const review: ReviewInput = {
             targetKind, targetId, selfConsistent, versusHistory, methodRef, sawReferenceAnswer,
-            independenceNote, sharedEvidenceIds, ...(targetRevision !== undefined ? { targetRevision } : {}), ...(novelty.length > 0 ? { novelty } : {}),
+            independenceNote, sharedEvidenceIds,
+            ...(purpose !== undefined ? { purpose } : {}),
+            ...(targetRevision !== undefined ? { targetRevision } : {}), ...(novelty.length > 0 ? { novelty } : {}),
           }
           return ok(await submitText(id, { kind: 'review.record', requestId: mintId('req'), review }, invocationCtx))
         }

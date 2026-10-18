@@ -77,7 +77,7 @@ export function disciplineIdentities(): DisciplineIdentityRow[] {
       source: '$DSH_HOME/AGENTS.md',
       mechanism: '当前会话的 baseline 消息（agent-instructions）',
       evidence: 'measured',
-      evidenceNote: '本会话上下文中可见，标题与工作包条目一致',
+      evidenceNote: '2026-10-17 核实：上下文可见且标题与工作包条目一致。这是当时的静态结论，不是每次会话重新探测',
     },
     {
       id: 'member',
@@ -85,7 +85,7 @@ export function disciplineIdentities(): DisciplineIdentityRow[] {
       source: '$DSH_HOME/AGENTS.md',
       mechanism: '成员是独立 session（spawn_teammate），启动时走同一条 baseline',
       evidence: 'inferred',
-      evidenceNote: '与子代理同一条链路；本轮没有单独起成员验过',
+      evidenceNote: '与子代理同一条链路，但没有单独起成员验过；标推断不标实测',
     },
     {
       id: 'subagent',
@@ -93,7 +93,7 @@ export function disciplineIdentities(): DisciplineIdentityRow[] {
       source: '$DSH_HOME/AGENTS.md',
       mechanism: '子代理同样是独立 session，走同一条 baseline',
       evidence: 'measured',
-      evidenceNote: '已实测：子代理原样回引本文件标题与「派单按工作包」条目',
+      evidenceNote: '2026-10-17 实测：子代理原样回引本文件标题与「派单按工作包」条目。是当时的结论，不是实时探测',
     },
   ]
 }
@@ -120,6 +120,7 @@ export function disciplineView(
       '面板显示的是磁盘原文与指纹，不是插件内副本，避免两边漂移。',
       '改这份文件后，**新会话**生效；已在跑的会话沿用其 baseline，需要下一轮或新会话才更新。',
       '纪律只有一份：三类身份共用，差别只在哪个 session 加载它。',
+      '「实测」是某次核实的静态结论，不是每次会话重新探测——要确认当下是否生效，看新会话的首轮行为。',
     ],
   }
 }

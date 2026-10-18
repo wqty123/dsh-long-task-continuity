@@ -817,6 +817,8 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 	const DISCIPLINE_PATH = "api/continuity.discipline";
 	// 上下文读数：占用 / 轮换线 / 判决 / 卡住的闸门。
 	const CONTEXT_PATH = "api/continuity.context";
+	// 上下文读数刷新节拍：与工作台同量级，够跟上占用变化又不至于空转。
+	const CONTEXT_POLL_MS = 15000;
 	const WORKBENCH_POLL_MS = 15000;
 	const TASK_FILTERS = ["attention", "all", "active", "review", "blocked", "completed", "failed", "cancelled", "needsReview"];
 	const ACTIVE_STATUSES = ["planned", "ready", "leased", "running", "retry_wait"];
@@ -1014,11 +1016,18 @@ window.__ModuleLoader__.load({ id: "dsh-long-task-continuity", factory: (require
 			}).catch(() => { /* 读不到就保持空态，不把错误塞进台账区 */ });
 		}, [tab.signal]);
 
+		// 上下文读数要跟着会话走，而且**持续刷新**：占用会变、判决会翻转，
+		// 只拉一次等于显示开机那一刻的快照（复审 P2-3）。
 		useEffect(() => {
-			readContext(tab.signal, sessionId).then((value) => {
-				if (tab.signal.aborted) return;
-				setContext(value);
-			}).catch(() => { /* 读不到保持空态 */ });
+			const pull = () => {
+				readContext(tab.signal, sessionId).then((value) => {
+					if (tab.signal.aborted) return;
+					setContext(value);
+				}).catch(() => { /* 读不到保持上一次的值 */ });
+			};
+			pull();
+			const poll = setInterval(() => { if (tab.visible) pull(); }, CONTEXT_POLL_MS);
+			return () => { clearInterval(poll); };
 		}, [tab.signal, sessionId]);
 
 		const data = read.phase === "ready" ? read.data : null;

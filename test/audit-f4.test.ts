@@ -92,6 +92,26 @@ test('F4 反例③：任务改版之后，旧审查自动失效（定向失效�
   )
 })
 
+test('F4 反例⑥：结论为 fail 的审查不能消掉逐任务复核缺口', () => {
+  const state = deliveredState()
+  const failed = { ...state, reviews: { rev_fail: review({ selfConsistent: 'fail' }) } } as MissionControl
+  const report = missionCompletion(failed)
+  assert.ok(
+    report.missing.some((m) => m.includes('没有独立复核')),
+    '审过了但结论是 fail，等于没过；不能因为它"存在一条记录"就消掉缺口',
+  )
+})
+
+test('F4 反例⑦：结论为 fail 的整体审核不能顶替收口审核', () => {
+  const state = deliveredState()
+  const failed = { ...state, reviews: { rev_if: review({ purpose: 'integration', selfConsistent: 'fail' }) } } as MissionControl
+  const report = missionCompletion(failed)
+  assert.ok(
+    report.missing.some((m) => m.includes('整体审核')),
+    '整体审核的结论也必须是 pass',
+  )
+})
+
 test('F4 反例④：整体审核（integration）不能顶替逐任务的交付复核', () => {
   const state = deliveredState()
   const onlyIntegration = {
